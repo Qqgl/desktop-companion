@@ -1,0 +1,27 @@
+{
+  "name": "desktop-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An always-summonable 2.5D anime companion that lives on your desktop.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "snapshot": "electron . --snapshot --bg=none --shots=idle,listening,thinking,speaking --outdir=snapshots/final",
+    "hitbox": "electron . --snapshot --bg=checker --hitbox --shots=idle",
+    "preview": "python tools/make-preview.py snapshots/final preview.png",
+    "test:memory": "node tools/test-memory.js",
+    "test:proactive": "node tools/test-proactive.js",
+    "test:rig": "node tools/test-rig.js",
+    "test:asr": "node tools/asr_test.js",
+    "icons": "node tools/gen-icons.js"
+  },
+  "devDependencies": {
+    "electron": "45.1.0"
+  },
+  "dependencies": {
+    "msedge-tts": "^2.1.1",
+    "sherpa-onnx-node": "^2.0.1",
+    "uiohook-napi": "^1.5.5"
+  }
+}

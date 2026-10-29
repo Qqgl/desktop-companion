@@ -1,0 +1,27 @@
+# ---- 机密：绝不提交 ----
+config.secrets.json
+*.secrets.json
+# 旧的写法：key 曾直接写在 config.json 里，留一条规则防止哪天又粘回去
+# （config.json 本身要提交，所以不能整份忽略）
+
+# ---- 依赖 ----
+node_modules/
+.npm-cache/
+.pip-cache/
+.electron-cache/
+.electron-userdata/
+
+# ---- 运行时产物 ----
+data/
+logs/
+memory/
+work/
+*.log
+
+# ---- 截图（体积大，每次运行都变）----
+snapshots/
+
+# ---- 系统 ----
+Thumbs.db
+desktop.ini
+.DS_Store

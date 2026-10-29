@@ -1,0 +1,144 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  /* 桌宠不该被文本选择、拖拽选中、右键菜单打扰 */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+#stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#debug {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.hidden { display: none !important; }
+
+/* ---------------- 对话气泡 ---------------- */
+
+.bubble {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%) translateY(6px) scale(0.92);
+  max-width: 300px;
+  min-width: 68px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 2.5px solid #2b3348;
+  color: #232a3a;
+  font-family: "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  font-size: 13.5px;
+  line-height: 1.55;
+  letter-spacing: 0.2px;
+  box-shadow: 0 6px 0 rgba(43, 51, 72, 0.18), 0 10px 24px rgba(20, 26, 40, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 180ms cubic-bezier(.2, .9, .3, 1.3);
+  word-break: break-word;
+}
+
+.bubble.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.bubble .tail {
+  position: absolute;
+  left: 50%;
+  bottom: -11px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  background: #ffffff;
+  border-right: 2.5px solid #2b3348;
+  border-bottom: 2.5px solid #2b3348;
+  transform: rotate(45deg) skew(-6deg, -6deg);
+  border-bottom-right-radius: 3px;
+}
+
+/* ---------------- 输入条 ---------------- */
+
+.composer {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 314px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 2.5px solid #2b3348;
+  box-shadow: 0 6px 0 rgba(43, 51, 72, 0.18), 0 10px 24px rgba(20, 26, 40, 0.22);
+  animation: composerIn 160ms cubic-bezier(.2, .9, .3, 1.25);
+}
+
+@keyframes composerIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px) scale(0.96); }
+}
+
+.composer input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #232a3a;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.composer input::placeholder {
+  color: #9aa5b8;
+}
+
+.composer button {
+  flex: none;
+  width: 36px;
+  height: 30px;
+  border-radius: 10px;
+  border: 2px solid #2b3348;
+  background: #eef4ff;
+  color: #2b3348;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 80ms ease, background 120ms ease;
+}
+
+.composer button:hover { background: #dfeaff; }
+.composer button:active { transform: translateY(1px); }
+
+/* 打字光标 */
+.bubble .caret::after {
+  content: "▍";
+  margin-left: 1px;
+  opacity: 0.55;
+  animation: blinkCaret 900ms steps(1) infinite;
+}
+
+@keyframes blinkCaret {
+  50% { opacity: 0; }
+}

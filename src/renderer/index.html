@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' file: data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>桌面伴侣</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 透明画布：角色就画在这里 -->
+  <canvas id="stage"></canvas>
+
+  <!-- 对话气泡（漫画式，逐字出） -->
+  <div id="bubble" class="bubble hidden" aria-live="polite">
+    <span id="bubble-text"></span>
+    <i class="tail"></i>
+  </div>
+
+  <!-- 输入条：点它 / Ctrl+Alt+Space 唤起 -->
+  <div id="composer" class="composer hidden">
+    <input id="composer-input" type="text" autocomplete="off" spellcheck="false"
+           placeholder="跟它说句话…" maxlength="500" />
+    <button id="composer-send" title="发送">↵</button>
+  </div>
+
+  <!-- 调试：命中区可视化 -->
+  <canvas id="debug" class="hidden"></canvas>
+
+  <script src="rig.js"></script>
+  <script src="character.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

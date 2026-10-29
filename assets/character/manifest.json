@@ -1,0 +1,55 @@
+{
+ "canvas": {
+  "width": 635,
+  "height": 1100
+ },
+ "fit": {
+  "height": 424,
+  "bottom": 630
+ },
+ "shadow": false,
+ "layers": [
+  {
+   "file": "layers/00_shadow.png",
+   "parallax": 0.0,
+   "sway": 0.0,
+   "tilt": 0.0
+  },
+  {
+   "file": "layers/01.png",
+   "parallax": 0.12,
+   "sway": 1.1,
+   "tilt": 0.0
+  },
+  {
+   "file": "layers/02.png",
+   "parallax": 0.326,
+   "sway": 0.85,
+   "tilt": 0.0
+  },
+  {
+   "file": "layers/03.png",
+   "parallax": 0.532,
+   "sway": 0.6,
+   "tilt": 0.0
+  },
+  {
+   "file": "layers/04.png",
+   "parallax": 0.738,
+   "sway": 0.35,
+   "tilt": 0.0
+  },
+  {
+   "file": "layers/05.png",
+   "parallax": 0.944,
+   "sway": 0.1,
+   "tilt": 0.0
+  },
+  {
+   "file": "layers/06.png",
+   "parallax": 1.15,
+   "sway": 0.0,
+   "tilt": 0.0
+  }
+ ]
+}

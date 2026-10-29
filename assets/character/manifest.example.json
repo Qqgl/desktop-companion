@@ -1,0 +1,14 @@
+{
+  "_comment": "把本文件改名为 manifest.json 即启用分层模式。所有图层必须是同一画布尺寸的透明 PNG。",
+  "canvas": { "width": 1000, "height": 1600 },
+  "fit": { "height": 320, "bottom": 462 },
+  "layers": [
+    { "file": "01_hair_back.png", "parallax": 0.35, "sway": 0.6 },
+    { "file": "02_body.png", "parallax": 0.25, "sway": 0.0 },
+    { "file": "03_face.png", "parallax": 1.0, "sway": 0.0 },
+    { "file": "04_eyes_open.png", "parallax": 1.0, "sway": 0.0 },
+    { "file": "05_mouth_closed.png", "parallax": 1.0, "sway": 0.0 },
+    { "file": "06_hair_front.png", "parallax": 0.8, "sway": 1.0 },
+    { "file": "07_ahoge.png", "parallax": 0.6, "sway": 1.4, "pivot": [500, 300] }
+  ]
+}
