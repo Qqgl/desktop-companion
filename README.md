@@ -208,6 +208,29 @@ node node_modules/electron/install.js
 
 没配 key 会自动退回 `mock`，日志里会说一声，不会崩。
 
+### 密钥放哪（重要）
+
+**不要把 key 写进 `config.json`。** 那个文件在仓库里，一旦提交，key 就永久留在 git 历史中了。
+
+推荐放在机器级的私密文件：
+
+```
+%APPDATA%\desktop-companion\secrets.json
+```
+
+```json
+{ "brain": { "apiKey": "sk-你的key" } }
+```
+
+`config.json` 里的 `apiKey` 留空即可，启动时会自动去这里取。优先级：
+
+```
+config.json 的 apiKey  >  secrets.json  >  ${环境变量}
+```
+
+上面任意一种都行，但**只有 secrets.json 和环变变量不会进仓库**。
+`.gitignore` 里已经挡了 `config.secrets.json`、`*.secrets.json`。
+
 ## 声音
 
 同样是 `config.json`：
