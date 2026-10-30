@@ -11,6 +11,37 @@
 
 let lib = null
 
+/**
+ * 合成必须串行。
+ *
+ * 渲染端会"预取"下一句（这句还在播，下一句就开始合），如果两句同时
+ * 往同一个 WebSocket 上发 toStream，回来的音频会互相串 —— 实测两句
+ * 只差 52ms 完成，内容对得上纯属运气。
+ * 串起来之后：当前句合成 ~1.3s（含握手）、后续句 ~0.4s，
+ * 而一句播放要 2~3s，所以下一句总能在播完前就绪，预取效果不减。
+ */
+let chain = Promise.resolve()
+function serialize(fn) {
+  const next = chain.then(fn, fn)
+  chain = next.then(() => {}, () => {})
+  return next
+}
+
+/** 预热：把连接建好，别让第一句话替握手买单 */
+async function warmup(vcfg, log = console.log) {
+  if (!vcfg || vcfg.enabled === false) return false
+  try {
+    await getTts(vcfg, log)
+    log('[voice] 连接已预热')
+    return true
+  } catch (e) {
+    log('[voice] 预热失败:', e.message)
+    return false
+  }
+}
+let shared = null
+let sharedKey = ''
+
 function loadLib() {
   if (lib !== null) return lib
   try {
@@ -20,6 +51,32 @@ function loadLib() {
     lib = false
   }
   return lib
+}
+
+function dropShared() {
+  if (shared) {
+    try { shared.close() } catch { /* 已经断了 */ }
+  }
+  shared = null
+  sharedKey = ''
+}
+
+async function getTts(vcfg, log) {
+  const m = loadLib()
+  if (!m) return null
+
+  const key = [vcfg.voice, vcfg.rate, vcfg.pitch, vcfg.volume].join('|')
+  if (shared && sharedKey === key) return shared
+
+  dropShared()
+  const inst = new m.MsEdgeTTS()
+  await inst.setMetadata(
+    vcfg.voice || 'zh-CN-XiaoyiNeural',
+    m.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3
+  )
+  shared = inst
+  sharedKey = key
+  return shared
 }
 
 /** 把 markdown 符号、代码、表情清掉，否则会被念出来 */
@@ -43,46 +100,47 @@ async function synthesize(text, vcfg, log = console.log) {
   const clean = sanitize(text)
   if (!clean) return null
 
-  const m = loadLib()
-  if (!m) return null
+  return serialize(async () => {
+    let tts
+    try {
+      tts = await getTts(vcfg, log)
+    } catch (e) {
+      log('[voice] 连接失败:', e.message)
+      dropShared()
+      return null
+    }
+    if (!tts) return null
 
-  const { MsEdgeTTS, OUTPUT_FORMAT } = m
-  const tts = new MsEdgeTTS()
+    try {
+      const opts = {}
+      if (vcfg.rate) opts.rate = vcfg.rate
+      if (vcfg.pitch) opts.pitch = vcfg.pitch
+      if (vcfg.volume) opts.volume = vcfg.volume
 
-  try {
-    await tts.setMetadata(
-      vcfg.voice || 'zh-CN-XiaoyiNeural',
-      OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3
-    )
+      const out = tts.toStream(clean, opts)
+      const stream = out && out.audioStream ? out.audioStream : out
+      if (!stream || typeof stream.on !== 'function') throw new Error('toStream 没返回流')
 
-    const opts = {}
-    if (vcfg.rate) opts.rate = vcfg.rate
-    if (vcfg.pitch) opts.pitch = vcfg.pitch
-    if (vcfg.volume) opts.volume = vcfg.volume
+      const chunks = []
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('合成超时 12s')), 12000)
+        const done = () => { clearTimeout(timer); resolve() }
+        stream.on('data', (c) => chunks.push(Buffer.from(c)))
+        stream.on('end', done)
+        stream.on('close', done)
+        stream.on('error', (e) => { clearTimeout(timer); reject(e) })
+      })
 
-    const out = tts.toStream(clean, opts)
-    const stream = out && out.audioStream ? out.audioStream : out
-    if (!stream || typeof stream.on !== 'function') throw new Error('toStream 没返回流')
-
-    const chunks = []
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('合成超时 12s')), 12000)
-      const done = () => { clearTimeout(timer); resolve() }
-      stream.on('data', (c) => chunks.push(Buffer.from(c)))
-      stream.on('end', done)
-      stream.on('close', done)
-      stream.on('error', (e) => { clearTimeout(timer); reject(e) })
-    })
-
-    const buf = Buffer.concat(chunks)
-    if (buf.length < 800) throw new Error(`音频太短（${buf.length} 字节），可能失败了`)
-    return buf
-  } catch (e) {
-    log('[voice] 合成失败:', e.message)
-    return null
-  } finally {
-    try { tts.close() } catch { /* 已关闭 */ }
-  }
+      const buf = Buffer.concat(chunks)
+      if (buf.length < 800) throw new Error(`音频太短（${buf.length} 字节），可能失败了`)
+      return buf
+    } catch (e) {
+      log('[voice] 合成失败:', e.message)
+      // 连接可能已经坏了，下次重建
+      dropShared()
+      return null
+    }
+  })
 }
 
-module.exports = { synthesize, sanitize }
+module.exports = { synthesize, sanitize, warmup }

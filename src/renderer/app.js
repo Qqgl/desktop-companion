@@ -353,6 +353,8 @@
       try { currentAudio.pause() } catch { /* 已经停了 */ }
       currentAudio = null
     }
+    // 正在排队的句子也一起丢掉，不然打断之后她还会接着念
+    if (typeof speechQueue !== 'undefined' && speechQueue) speechQueue.length = 0
     analyser = null
     rig.speakLevel = 0
   }
@@ -370,50 +372,123 @@
     return out.length ? out : [String(text)]
   }
 
-  /** 逐句合成、逐句播放；合成失败就只留气泡，按字数假装读完 */
-  async function speakAll(text) {
-    speakAbort = false
-    rig.setState('speaking')
+  // ---------------------------------------------------------------- 发声流水线
+  //
+  // 以前是「等整段回答说完 → 一句一句合成 → 一句一句播」。
+  // 结果是文字早就显示完了，声音还要再等 2~6 秒，而且每句合成时还得干等。
+  //
+  // 现在拆成三段流水：出字 → 成句就立刻开始合成 → 按顺序播。
+  // 合成和播放重叠，第一句的字一出现就可以开始合，第二句在第一句播放时就已经就绪。
 
+  let speechQueue = []        // [{ text, p }]  p 是已经在路上的合成 Promise
+  let speechPumping = false
+  let speechEnded = false
+  let speechPending = ''      // 还没成句的尾巴
+
+  const SENT_END = /[。！？!?；;\n]/
+
+  function speechReset() {
+    speechQueue.length = 0
+    speechPumping = false
+    speechEnded = false
+    speechPending = ''
+  }
+
+  /** 把一段文字拆成完整句子塞进队列；尾巴留着等下一段 */
+  function feedSpeech(delta) {
+    speechPending += delta
+    let m
+    // 每找到一个句末标点就切一句
+    while ((m = SENT_END.exec(speechPending))) {
+      const cut = m.index + 1
+      const part = speechPending.slice(0, cut)
+      speechPending = speechPending.slice(cut)
+      const t = part.trim()
+      if (t.length >= 2) enqueueSpeech(t)
+    }
+    // 太长还没断句（比如没有标点的长句）：到 60 字就先念，别一直憋着
+    if (speechPending.trim().length > 60) {
+      const t = speechPending.trim()
+      speechPending = ''
+      enqueueSpeech(t)
+    }
+  }
+
+  function enqueueSpeech(text) {
+    // 立刻发起合成，不等播放 —— 这就是"预取"
+    const p = ttsWorks
+      ? window.companion.tts(text).catch(() => null)
+      : Promise.resolve(null)
+    speechQueue.push({ text, p })
+    pumpSpeech()
+  }
+
+  /** 收尾：把剩下的尾巴说完，然后等队列清空回到 idle */
+  function finishSpeech() {
+    const rest = speechPending.trim()
+    speechPending = ''
+    if (rest) enqueueSpeech(rest)
+    speechEnded = true
+    pumpSpeech()
+  }
+
+  async function pumpSpeech() {
+    if (speechPumping) return
+    speechPumping = true
     const startedAt = Date.now()
-    const HARD_LIMIT = 60000   // 整轮发声的上限，防止任何一环卡住把状态锁死
 
-    const parts = splitSentences(text)
-    for (const part of parts) {
-      if (speakAbort) break
-      if (Date.now() - startedAt > HARD_LIMIT) {
-        console.warn('[speak] 超过硬上限，强制收尾')
-        break
-      }
-      let bytes = null
-      if (ttsWorks) {
-        try { bytes = await window.companion.tts(part) } catch { bytes = null }
+    try {
+      while (speechQueue.length) {
+        if (speakAbort) { speechQueue.length = 0; break }
+        if (Date.now() - startedAt > 60000) {
+          console.warn('[speak] 超过硬上限，强制收尾')
+          speechQueue.length = 0
+          break
+        }
+
+        const item = speechQueue.shift()
+        let bytes = null
+        try { bytes = await item.p } catch { bytes = null }
+
         if (!bytes || !bytes.length) {
-          ttsWorks = false
-          console.warn('[tts] 没拿到音频，转静音模式')
+          if (ttsWorks) {
+            ttsWorks = false
+            console.warn('[tts] 没拿到音频，转静音模式')
+          }
+        }
+        if (speakAbort) break
+
+        if (bytes && bytes.length) {
+          try {
+            await playMp3(bytes)
+          } catch (e) {
+            console.warn('[audio]', e && e.message)
+            ttsWorks = false
+            await sleep(clamp(item.text.length * 90, 500, 2600))
+          }
+        } else {
+          await sleep(clamp(item.text.length * 90, 500, 2600))
         }
       }
-      if (speakAbort) break
-      if (bytes && bytes.length) {
-        try {
-          await playMp3(bytes)
-        } catch (e) {
-          // 没有音频设备 / 解码失败：退化成按字数等待，别把状态卡死
-          console.warn('[audio]', e && e.message)
-          ttsWorks = false
-          await sleep(clamp(part.length * 90, 500, 2600))
-        }
-      } else {
-        await sleep(clamp(part.length * 90, 500, 2600))
-      }
+    } finally {
+      speechPumping = false
     }
 
-    analyser = null
-    rig.speakLevel = 0
-    if (!speakAbort) {
+    if (speechEnded && !speechQueue.length && !speakAbort) {
+      analyser = null
+      rig.speakLevel = 0
       rig.setState('idle')
       scheduleHide(1100)
     }
+  }
+
+  /** 整段念（主动开口、打招呼这类不是流式来的话） */
+  async function speakAll(text) {
+    speakAbort = false
+    rig.setState('speaking')
+    speechReset()
+    feedSpeech(text)
+    finishSpeech()
   }
 
   // ---------------------------------------------------------------- 大脑
@@ -437,6 +512,7 @@
     clearTimeout(noticeTimer)
     stopSpeaking()
     speakAbort = false
+    speechReset()
 
     console.warn('[chat] 发问:', text)
     rig.setState('thinking')
@@ -481,6 +557,8 @@
       if (!streamedText) rig.setState('speaking')
       streamedText += delta
       streamBubbleAppend(delta)
+      // 一边出字一边送进发声流水线：第一句一出现就开始合成
+      feedSpeech(delta)
     })
 
     window.companion.onChatDone(() => {
@@ -493,7 +571,7 @@
         scheduleHide(1600)
         return
       }
-      speakAll(streamedText)
+      finishSpeech()
     })
 
     window.companion.onChatError((msg) => {

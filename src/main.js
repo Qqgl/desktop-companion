@@ -892,6 +892,12 @@ if (!gotLock) {
       setTimeout(() => log('asr warmup ->', asr.warmup()), delay)
     }
 
+    // 语音连接先建好：握手要 1 秒多，别让第一句话替它买单。
+    // 自检时也要预热，否则量到的延迟里有一半是握手，数字没有参考价值。
+    if (cfg.voice.enabled) {
+      setTimeout(() => voice.warmup(cfg.voice, log), atLogin ? 12000 : 900)
+    }
+
     // 每分钟问一次「现在能不能开口」。它自己会拒绝绝大部分时候。
     if (!IS_SNAPSHOT && proactive) {
       setInterval(() => {
