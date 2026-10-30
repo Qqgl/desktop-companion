@@ -140,6 +140,22 @@ const DEFS = [
   {
     type: 'function',
     function: {
+      name: 'look_at_screen',
+      description:
+        '看一眼用户当前的屏幕，回答关于它的问题。用户说「帮我看看这个」「屏幕上是什么」「这报错什么意思」时用。' +
+        '每次调用会截一张当前主屏发出去。',
+      parameters: {
+        type: 'object',
+        properties: {
+          question: { type: 'string', description: '用户想问关于屏幕的什么，尽量用他的原话' },
+        },
+        required: ['question'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'open_url',
       description: '在默认浏览器里打开一个网址。用户说"打开某个网站"时用。',
       parameters: {
@@ -232,11 +248,16 @@ function checkUrl(raw) {
 /**
  * @returns {Promise<{ok:boolean, said:string}>} said 是要回给模型的结果描述
  */
-async function run(name, args, { shell, log = console.log } = {}) {
+async function run(name, args, { shell, log = console.log, eyes = null } = {}) {
   const a = args || {}
   log('[tool]', name, JSON.stringify(a))
 
   try {
+    if (name === 'look_at_screen') {
+      if (!eyes) return { ok: false, said: '眼睛没有接上' }
+      return await eyes.look(a.question || '屏幕上有什么')
+    }
+
     if (name === 'open_url') {
       const c = checkUrl(a.url)
       if (!c.ok) return { ok: false, said: `打不开：${c.error}` }

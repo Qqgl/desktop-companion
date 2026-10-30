@@ -38,6 +38,15 @@ const DEFAULTS = {
     numThreads: 4,
     language: 'auto',       // auto | zh | en | ja | ko | yue
   },
+  vision: {
+    enabled: true,
+    // 留空就沿用 brain 的 baseURL / model / apiKey（DeepSeek 两个接口都认）
+    baseURL: '',
+    model: '',
+    apiKey: '',
+    maxWidth: 1280,         // 截图长边上限，越大越贵越慢
+    timeoutMs: 30000,
+  },
 }
 
 function expandEnv(value) {
@@ -84,6 +93,7 @@ function load(rootDir, log = console.log) {
     brain: { ...DEFAULTS.brain, ...(user.brain || {}) },
     voice: { ...DEFAULTS.voice, ...(user.voice || {}) },
     asr: { ...DEFAULTS.asr, ...(user.asr || {}) },
+    vision: { ...DEFAULTS.vision, ...(user.vision || {}) },
   }
   cfg.brain.apiKey = expandEnv(cfg.brain.apiKey)
 

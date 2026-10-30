@@ -30,6 +30,7 @@ const { Proactive } = require('./proactive')
 const autostart = require('./autostart')
 const shortcut = require('./shortcut')
 const toolRunner = require('./tools')
+const eyesModule = require('./eyes')
 
 // 桌宠会自己开口，不需要用户手势
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
@@ -241,9 +242,12 @@ function personaName() {
   return (cfg && cfg.persona && cfg.persona.name) || ''
 }
 
-/** 工具执行器：真正"动手"的地方在 tools.js，这里只提供 electron 的 shell */
+/** 工具执行器：真正"动手"的地方在 tools.js，这里提供 electron 的 shell 和眼睛 */
 function execTool(name, args) {
-  return toolRunner.run(name, args, { shell, log })
+  const eyes = {
+    look: (question) => eyesModule.look(question, cfg, log),
+  }
+  return toolRunner.run(name, args, { shell, log, eyes })
 }
 
 /** 改了 config.json 之后不用重启，托盘里点一下就行 */
@@ -814,6 +818,19 @@ if (!gotLock) {
         app.exit(0)
         return
       }
+    }
+
+    // 自检用：--eyes="问题" 截一张屏交给视觉模型，回答打到日志后退出
+    if (hasFlag('--eyes')) {
+      const q = flagValue('--eyes', '屏幕上有什么')
+      const question = typeof q === 'string' ? q : '屏幕上有什么'
+      const r = await eyesModule.look(question, cfg, log, {
+        saveTo: path.join(__dirname, '..', 'work', 'eyes.jpg'),
+      })
+      log('[eyes] 结果 ok=', r.ok, '|', r.said)
+      app.isQuitting = true
+      app.exit(0)
+      return
     }
 
     loadState()
