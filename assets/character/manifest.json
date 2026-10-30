@@ -8,6 +8,11 @@
   "bottom": 630
  },
  "shadow": false,
+ "tail": {
+  "file": "layers/tail.png",
+  "pivot": [205, 480],
+  "maxAngle": 6
+ },
  "layers": [
   {
    "file": "layers/00_shadow.png",
@@ -16,7 +21,7 @@
    "tilt": 0.0
   },
   {
-   "file": "layers/01.png",
+   "file": "layers/01_body.png",
    "parallax": 0.12,
    "sway": 1.1,
    "tilt": 0.0

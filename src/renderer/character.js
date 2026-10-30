@@ -740,19 +740,60 @@
         img: null,
         url: baseUrl.replace(/\/$/, '') + '/' + l.file,
       }))
+
+      // 尾巴：单独一张图，绕支点旋转，画在所有图层之前（身体在它前面）
+      this.tail = manifest.tail
+        ? {
+            def: manifest.tail,
+            img: null,
+            url: baseUrl.replace(/\/$/, '') + '/' + manifest.tail.file,
+          }
+        : null
+
       this.ready = false
       this.loadAll()
     }
 
     loadAll() {
-      let left = this.layers.length
+      const items = this.layers.concat(this.tail ? [this.tail] : [])
+      let left = items.length
       if (!left) { this.ready = true; return }
-      for (const L of this.layers) {
+      for (const L of items) {
         const img = new Image()
         img.onload = () => { L.img = img; if (--left === 0) this.ready = true }
         img.onerror = () => { console.warn('[layer] 加载失败', L.url); if (--left === 0) this.ready = true }
         img.src = L.url
       }
+    }
+
+    /** 尾巴：绕支点旋转 + 略微跟着视差横移 */
+    drawTail(ctx, rig, bx, bottom) {
+      const t = this.tail
+      if (!t || !t.img) return
+
+      const def = t.def
+      const pivot = def.pivot || [205, 480]
+      const maxA = Number(def.maxAngle) || 6
+      const deg = Math.max(-maxA, Math.min(maxA, rig.tailAngle ? rig.tailAngle.value : 0))
+
+      const px = bx + pivot[0] * this.scale
+      const py = this.baseY + pivot[1] * this.scale
+
+      // 横移和它所在的那一层一致（最底层，parallax 0.12）
+      const dx = rig.headX.value * 0.12 * 0.85 + rig.tailX.value * 1.1
+      const dy = rig.headY.value * 0.12 * 0.5
+
+      ctx.save()
+      ctx.translate(CX, bottom - rig.floatY)
+      ctx.scale(1 - rig.breath * 0.007, 1 + rig.breath * 0.013)
+      ctx.translate(-CX, -(bottom - rig.floatY))
+
+      ctx.translate(px, py)
+      ctx.rotate((deg * Math.PI) / 180)
+      ctx.translate(-px, -py)
+
+      ctx.drawImage(t.img, bx + dx, this.baseY + dy, this.baseW, this.baseH)
+      ctx.restore()
     }
 
     draw(ctx, rig) {
@@ -775,6 +816,9 @@
         ctx.fill()
         ctx.restore()
       }
+
+      // 尾巴先画：它在身体后面，静止时被手臂挡住
+      this.drawTail(ctx, rig, bx, bottom)
 
       for (const L of this.layers) {
         if (!L.img) continue

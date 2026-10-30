@@ -70,6 +70,9 @@
       // 尾巴会永久比脸飘得更远，反而违反视差规律。
       // k=30 d=6.5 → 阻尼比 0.59，过冲约 10%，0.7 秒收住；再软就成果冻了。
       this.tailX = new Spring({ k: 30, d: 6.5 })
+      // 尾巴的独立摆角（度）。k 刻意压得很低：一根有重量的尾巴，
+      // 应该比头慢 150ms 左右才轮到它跟上，快了就像贴纸。
+      this.tailAngle = new Spring({ k: 13, d: 3.2 })
 
       // ---- 表情
       this.eyeOpen = 1
@@ -187,11 +190,18 @@
       this.lockR.target = lx * 4.0 - this.tilt.value * 6
       this.ahoge.target = lx * 11.5 + Math.sin(t * 2.3) * 1.4
       this.tailX.target = lx * 4.6 + Math.sin(t * 1.7 + 1.1) * 0.8
+      // 尾巴的摆角（度）。刚度刻意比 hairX 更低：它比整个人慢半拍，
+      // 才会有"重量"感；跟随方向与头部相反，因为尾巴拖在后面。
+      this.tailAngle.target =
+        -lx * 2.6 +
+        Math.sin(t * 1.15 + 0.6) * 1.15 +
+        Math.sin(t * 0.43) * 0.5
       this.hairX.step(dt)
       this.lockL.step(dt)
       this.lockR.step(dt)
       this.ahoge.step(dt)
       this.tailX.step(dt)
+      this.tailAngle.step(dt)
 
       // ---------- 眨眼 ----------
       this.updateBlink(dt)

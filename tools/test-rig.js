@@ -91,5 +91,48 @@ step(300)
 check('往左甩尾巴也到位', rig.tailX.value < rig.tailX.target - 0.5 || Math.abs(rig.tailX.value - rig.tailX.target) < 0.5,
   `${rig.tailX.value.toFixed(2)} / ${rig.tailX.target.toFixed(2)}`)
 
+// ---------------------------------------------------------------- 尾巴摆角
+// 这是"真正独立的尾巴"：不是整层平移，而是绕支点旋转。
+// 要验三件事：① 动起来了 ② 比头慢半拍 ③ 会收住，不会一直晃
+
+rig.setLook(0, 0)
+step(800)
+const baseAngle = rig.tailAngle.value
+
+rig.setLook(1, 0)
+const angTrace = []
+for (let t = 0; t <= 1600; t += 10) {
+  if (t > 0) step(10)
+  angTrace.push({
+    t,
+    a: rig.tailAngle.value,
+    at: rig.tailAngle.target,
+    h: rig.headX.value,
+    ht: rig.headX.target,
+  })
+}
+
+const maxAng = Math.max(...angTrace.map((x) => Math.abs(x.a)))
+const over = Math.max(...angTrace.map((x) => Math.abs(x.a) - Math.abs(x.at)))
+
+// 各自到达终值 90% 用了多久。这是"慢半拍"最直接的量化方式。
+const timeTo90 = (valKey) => {
+  const fin = angTrace[angTrace.length - 1][valKey]
+  const hit = angTrace.find((x) => Math.abs(x[valKey] - fin) < Math.abs(fin) * 0.1)
+  return hit ? hit.t : 9999
+}
+const head90 = timeTo90('h')
+const tail90 = timeTo90('a')
+
+console.log(`\n尾巴摆角：最大 ${maxAng.toFixed(2)}°，最大过冲 ${over.toFixed(3)}°`)
+console.log(`        到 90%：头 ${head90}ms，尾巴 ${tail90}ms（落后 ${tail90 - head90}ms）`)
+
+check('尾巴角度确实动起来了', maxAng > 1.5, `最大 ${maxAng.toFixed(2)}°`)
+check('角度有上限（不超过 6°）', maxAng < 6.5, `最大 ${maxAng.toFixed(2)}°`)
+check('尾巴比头慢半拍（落后 120ms 以上）', tail90 - head90 >= 120, `只落后 ${tail90 - head90}ms`)
+check('但也不至于迟钝（1800ms 内到位）', tail90 < 1800, `${tail90}ms`)
+check('有回摆但不过头（0~1.5°）', over > 0.02 && over < 1.5, `${over.toFixed(3)}°`)
+check('静止时在 0 附近微晃', Math.abs(baseAngle) < 2.5, `${baseAngle.toFixed(2)}°`)
+
 console.log(`\n===== ${pass} passed, ${fail} failed =====`)
 process.exit(fail ? 1 : 0)
