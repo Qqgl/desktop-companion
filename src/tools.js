@@ -14,7 +14,29 @@
 'use strict'
 
 const fs = require('node:fs')
+const path = require('node:path')
+const os = require('node:os')
 const { execFile } = require('node:child_process')
+const { Browser } = require('./browser')
+
+// 浏览器实例：第一次用才启动，整个进程共用一个
+let _browser = null
+function getBrowser(userDataDir = os.tmpdir(), log = console.log) {
+  if (!_browser) {
+    _browser = new Browser({
+      profileDir: path.join(userDataDir, 'browser-profile'),
+      log,
+    })
+  }
+  return _browser
+}
+
+function closeBrowser() {
+  if (_browser) {
+    _browser.close()
+    _browser = null
+  }
+}
 
 // ------------------------------------------------------------ 白名单
 
@@ -140,6 +162,63 @@ const DEFS = [
   {
     type: 'function',
     function: {
+      name: 'browser_open',
+      description:
+        '在一个她自己的浏览器窗口里打开网页，并返回页面标题和正文开头。' +
+        '要「操作」网页（搜索、点按钮、填表单）时必须从这一步开始，不能用 open_url。',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: '完整网址，http/https' },
+        },
+        required: ['url'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_read',
+      description: '读当前浏览器页面上的文字。点完按钮、翻页之后用它确认结果。',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_click',
+      description:
+        '在当前页面按**可见文字**点击。参数填按钮或链接上显示的字，比如「搜索」「下一页」「立即购买」。',
+      parameters: {
+        type: 'object',
+        properties: {
+          text: { type: 'string', description: '要点的元素上显示的文字' },
+        },
+        required: ['text'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_type',
+      description:
+        '往当前页面的输入框里填字。hint 填这个框的提示文字（placeholder / 名字 / 旁边标签），' +
+        '搜索框可以把 enter 设成 true 直接回车。',
+      parameters: {
+        type: 'object',
+        properties: {
+          hint: { type: 'string', description: '输入框的提示文字或名称' },
+          value: { type: 'string', description: '要填进去的内容' },
+          enter: { type: 'boolean', description: '填完是否回车提交' },
+        },
+        required: ['hint', 'value'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'look_at_screen',
       description:
         '看一眼用户当前的屏幕，回答关于它的问题。用户说「帮我看看这个」「屏幕上是什么」「这报错什么意思」时用。' +
@@ -248,7 +327,7 @@ function checkUrl(raw) {
 /**
  * @returns {Promise<{ok:boolean, said:string}>} said 是要回给模型的结果描述
  */
-async function run(name, args, { shell, log = console.log, eyes = null } = {}) {
+async function run(name, args, { shell, log = console.log, eyes = null, userDataDir = os.tmpdir() } = {}) {
   const a = args || {}
   log('[tool]', name, JSON.stringify(a))
 
@@ -256,6 +335,43 @@ async function run(name, args, { shell, log = console.log, eyes = null } = {}) {
     if (name === 'look_at_screen') {
       if (!eyes) return { ok: false, said: '眼睛没有接上' }
       return await eyes.look(a.question || '屏幕上有什么')
+    }
+
+    // ---------------- 操作浏览器 ----------------
+    if (name.startsWith('browser_')) {
+      const b = getBrowser(userDataDir, log)
+
+      if (name === 'browser_open') {
+        const c = checkUrl(a.url)
+        if (!c.ok) return { ok: false, said: `打不开：${c.error}` }
+        const r = await b.goto(c.url)
+        return {
+          ok: true,
+          said: `已打开「${r.title || r.url}」\n址: ${r.url}\n\n${(r.text || '').slice(0, 1200)}`,
+        }
+      }
+
+      if (name === 'browser_read') {
+        const r = await b.read()
+        return { ok: true, said: `「${r.title || r.url}」\n址: ${r.url}\n\n${r.text || '(页面上没有文字)'}` }
+      }
+
+      if (name === 'browser_click') {
+        const r = await b.click(a.text)
+        const after = await b.read().catch(() => null)
+        return {
+          ok: true,
+          said: `点了「${r.what}」` + (after ? `\n现在在「${after.title || after.url}」\n\n${(after.text || '').slice(0, 800)}` : ''),
+        }
+      }
+
+      if (name === 'browser_type') {
+        const r = await b.type(a.hint || a.field, a.value)
+        if (a.enter) await b.pressEnter()
+        return { ok: true, said: `已填进「${r.target}」${a.enter ? '，并回车' : ''}` }
+      }
+
+      return { ok: false, said: `没有这个浏览器工具：${name}` }
     }
 
     if (name === 'open_url') {
@@ -355,4 +471,4 @@ async function run(name, args, { shell, log = console.log, eyes = null } = {}) {
   }
 }
 
-module.exports = { DEFS, run, APPS }
+module.exports = { DEFS, run, APPS, closeBrowser }

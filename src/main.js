@@ -72,7 +72,9 @@ const WIN_W = 360
 const WIN_H = 620
 
 const argv = process.argv.slice(1)
-const hasFlag = (f) => argv.includes(f)
+// 同时认 `--x` 和 `--x=value` —— 只做精确匹配的话，
+// `--wsprobe=9333` 这种带值的写法会被 hasFlag 漏掉，那段代码就悄悄不执行了。
+const hasFlag = (f) => argv.some((a) => a === f || a.startsWith(f + '='))
 const flagValue = (f, def) => {
   const hit = argv.find((a) => a === f || a.startsWith(f + '='))
   if (!hit) return def
@@ -247,7 +249,12 @@ function execTool(name, args) {
   const eyes = {
     look: (question) => eyesModule.look(question, cfg, log),
   }
-  return toolRunner.run(name, args, { shell, log, eyes })
+  return toolRunner.run(name, args, {
+    shell,
+    log,
+    eyes,
+    userDataDir: app.getPath('userData'),
+  })
 }
 
 /** 改了 config.json 之后不用重启，托盘里点一下就行 */
@@ -727,6 +734,7 @@ function quit() {
   saveState()
   if (dragTimer) clearInterval(dragTimer)
   hotkey.stopAll()
+  try { toolRunner.closeBrowser() } catch { /* 没启动过 */ }
   if (watcher) {
     try { watcher.kill() } catch { /* 已经没了 */ }
   }
@@ -818,6 +826,31 @@ if (!gotLock) {
         app.exit(0)
         return
       }
+    }
+
+    // 自检用：--wsprobe 在主进程里验证 WebSocket 能不能收到 CDP 回复
+    if (hasFlag('--wsprobe')) {
+      const port = Number(flagValue('--wsprobe', 9333)) || 9333
+      try {
+        const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
+        const t = list.find((x) => x.type === 'page')
+        log('[wsprobe] target=', t && t.id)
+        const ws = new WebSocket(t.webSocketDebuggerUrl)
+        let got = 0
+        ws.addEventListener('open', () => { log('[wsprobe] open'); ws.send(JSON.stringify({ id: 1, method: 'Page.enable' })) })
+        ws.addEventListener('message', (ev) => {
+          got++
+          log('[wsprobe] message', typeof ev.data, String(ev.data).slice(0, 80))
+        })
+        ws.addEventListener('error', () => log('[wsprobe] error'))
+        await new Promise((r) => setTimeout(r, 5000))
+        log('[wsprobe] 收到', got, '条 ->', got ? 'WS_OK' : 'WS_NO_REPLY')
+      } catch (e) {
+        log('[wsprobe] 失败', e.message)
+      }
+      app.isQuitting = true
+      app.exit(0)
+      return
     }
 
     // 自检用：--eyes="问题" 截一张屏交给视觉模型，回答打到日志后退出
@@ -920,6 +953,8 @@ if (!gotLock) {
   app.on('before-quit', () => {
     app.isQuitting = true
     saveState()
+    // 她开的那个 Edge 也要一起收掉，不然会留在后台占着调试端口
+    try { toolRunner.closeBrowser() } catch { /* 没启动过 */ }
   })
 }
 
