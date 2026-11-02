@@ -105,7 +105,8 @@
       hitState = hit
       ignoring = !hit
       window.companion.setIgnoreMouse(ignoring)
-      stage.style.cursor = hit ? 'grab' : 'default'
+      // 不能拖了，光标就别显示成"抓手"——那会让人以为能抓
+      stage.style.cursor = hit ? 'pointer' : 'default'
     }
   }
 
@@ -149,6 +150,13 @@
 
   let pressAt = null
   let dragging = false
+  let draggable = false   // 由主进程按 config.window.draggable 决定，默认关
+
+  if (window.companion.info) {
+    window.companion.info().then((i) => {
+      draggable = !!(i && i.draggable)
+    }).catch(() => {})
+  }
 
   window.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return
@@ -157,11 +165,10 @@
     if (!hitTest(p.x, p.y)) return
     pressAt = { x: e.clientX, y: e.clientY }
     dragging = false
-    stage.style.cursor = 'grabbing'
   })
 
   window.addEventListener('mousemove', (e) => {
-    if (!pressAt || dragging) return
+    if (!pressAt || dragging || !draggable) return
     if (Math.hypot(e.clientX - pressAt.x, e.clientY - pressAt.y) > 5) {
       dragging = true
       window.companion.dragStart()
@@ -170,7 +177,6 @@
 
   window.addEventListener('mouseup', (e) => {
     if (!pressAt) return
-    stage.style.cursor = hitState ? 'grab' : 'default'
     if (dragging) {
       window.companion.dragEnd()
     } else if (e.button === 0) {
@@ -178,6 +184,14 @@
     }
     pressAt = null
     dragging = false
+  })
+
+  // 右键：弹出她自己的菜单（收起来 / 跳舞 / 归位 / 退出）
+  window.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
+    const p = toDesign(e.clientX, e.clientY)
+    if (!hitTest(p.x, p.y)) return
+    if (window.companion.contextMenu) window.companion.contextMenu()
   })
 
   function onClick() {

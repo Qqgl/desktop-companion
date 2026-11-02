@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('companion', {
   hide: () => ipcRenderer.send('window:hide'),
   quit: () => ipcRenderer.send('app:quit'),
   refreshTray: () => ipcRenderer.send('tray:refresh'),
+  contextMenu: () => ipcRenderer.send('ui:contextmenu'),
   assets: () => ipcRenderer.invoke('character:assets'),
   info: () => ipcRenderer.invoke('app:info'),
   /** 全局光标位置（窗口坐标系），鼠标在窗口外也会更新 */

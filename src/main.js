@@ -714,7 +714,29 @@ function wireIpc() {
     dnd,
     bounds: win ? win.getBounds() : null,
     scale: screen.getPrimaryDisplay().scaleFactor,
+    draggable: cfg.window.draggable === true,
   }))
+
+  // 在她身上右键：弹出她自己的菜单（托盘那个不好找）
+  ipcMain.on('ui:contextmenu', () => {
+    if (!win) return
+    const visible = win.isVisible()
+    Menu.buildFromTemplate([
+      { label: '打开输入框', click: () => openComposerFromMenu() },
+      {
+        label: visible ? '收起来（鼠标划过再出现）' : '叫它出来',
+        click: () => toggleVisible(),
+      },
+      { label: '跳个舞', click: () => startDance() },
+      { label: '回到右下角', click: () => recenter() },
+      { type: 'separator' },
+      {
+        label: '打开 config.json',
+        click: () => shell.openPath(path.join(__dirname, '..', 'config.json')),
+      },
+      { label: '退出', click: () => quit() },
+    ]).popup({ window: win })
+  })
 
   // ---------------- 记忆 ----------------
 
@@ -842,6 +864,17 @@ function toFileUrl(p) {
 }
 
 // ---------------------------------------------------------------- 生命周期
+
+/** 从她身上的右键菜单里"打开输入框" */
+function openComposerFromMenu() {
+  if (!win) return
+  tuckAway = false
+  hoverRevealed = false
+  win.showInactive()
+  win.setIgnoreMouseEvents(false)
+  win.focus()
+  win.webContents.send('input:toggle')
+}
 
 function quit() {
   app.isQuitting = true
