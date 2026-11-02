@@ -102,7 +102,7 @@
       // 律动：不是"舞蹈动作"，是跟着节拍的整体起伏。
       // 她的身体是一张图，没有关节可以掰；但整层在动 + 尾巴滞后半拍，
       // 看起来就是"在跟拍子晃"。amp 是淡入淡出的包络，避免突然开始/结束。
-      this.dance = { on: false, bpm: 88, phase: 0, amp: 0, until: 0 }
+      this.dance = { on: false, bpm: 76, phase: 0, amp: 0, until: 0, gain: 1 }
       this.danceTail = 0   // 节拍驱动的尾巴角度（度），绕过弹簧叠加到输出上
 
       this.setPoseTargets('idle', true)
@@ -114,10 +114,11 @@
     }
 
     /** 开始律动。seconds 之后自动停 */
-    startDance({ bpm = 88, seconds = 12 } = {}) {
+    startDance({ bpm = 76, seconds = 14, gain = 1 } = {}) {
       const d = this.dance
       d.on = true
-      d.bpm = clamp(Number(bpm) || 88, 60, 180)
+      d.gain = clamp(Number(gain) || 1, 0.2, 2)   // 整体幅度倍率，配置里可调
+      d.bpm = clamp(Number(bpm) || 76, 50, 160)
       d.until = this.t + (Number(seconds) || 12)
       // 相位从当前节拍位置接着走，反复触发不会卡顿
       this.setState('dance')
@@ -200,7 +201,8 @@
       // 一拍一次下沉、两拍一次左右摆，头和尾巴各晚半拍跟上。
       // amp 是包络：开始时不硬切，结束时慢慢松掉。
       const d = this.dance
-      d.amp = lerp(d.amp, d.on ? 1 : 0, 1 - Math.exp(-dt * 5))
+      // 淡入要慢：0.5 秒才到位。之前 5 的速率 0.2 秒就满，主观上就是"突然开始抖"
+      d.amp = lerp(d.amp, d.on ? d.gain : 0, 1 - Math.exp(-dt * 2))
       if (d.on) {
         d.phase += dt * (d.bpm / 60) * TAU
         if (t > d.until) d.on = false
@@ -224,8 +226,10 @@
       const LAG_TAIL = 1.8      // ≈0.29 拍（再大就接近反相，尾巴会跟身体对着摆）
       const LAG_AHOGE = 2.4     // ≈0.38 拍
 
-      const dip = -12 * da * pulse(p)
-      const swayX = 7 * da * weight
+      // 横向摆：424px 高的角色，横向 7px 在桌面上读起来像"整块在滑"，
+      // 不是"人在换重心"。收到 4.5，纵向加深一点，比例才对。
+      const dip = -14 * da * pulse(p)
+      const swayX = 4.5 * da * weight
       const headDip = -5 * da * pulse(p - LAG_HEAD)
       // 头发直接吃弹簧，所以给小一点：弹簧在 0.7Hz 附近有 2 倍放大
       const headTilt = 3.5 * da * Math.sin(p / 2 - LAG_HEAD)
@@ -233,9 +237,10 @@
       // 尾巴不走弹簧。它固有频率 0.57Hz，跟重心摆动 0.73Hz 撞上了，
       // 交给弹簧会共振：实测摆到 22°、滞后 0.94 拍（几乎反相）。
       // 节拍分量单独算，再和弹簧的输出相加。
-      // 幅度控制在 8°：manifest 的 maxAngle 是 12，留出余量，
-      // 否则会一直顶在限幅边界上（饱和），看起来就是"卡住不动"或者"抖"
-      this.danceTail = 8 * da * Math.sin(p / 2 - LAG_TAIL)
+      // 幅度控制在 4°：尾巴是一大团长毛，8° 的时候尖端在屏幕上要扫 30 多像素，
+      // 看起来像在"抖"而不是"甩"。4° 的尖端位移约 15px，才像尾巴。
+      // manifest 的 maxAngle 是 12，留足余量，不会顶到限幅。
+      this.danceTail = 4 * da * Math.sin(p / 2 - LAG_TAIL)
 
       // 漂浮：聆听时几乎不动，说话时起伏大一点
       const floatAmp = this.state === 'listening' ? 1.1 : 2.6

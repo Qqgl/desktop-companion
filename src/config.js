@@ -47,6 +47,14 @@ const DEFAULTS = {
     maxWidth: 1280,         // 截图长边上限，越大越贵越慢
     timeoutMs: 30000,
   },
+  dance: {
+    bpm: 76,                // 太快这个角色会显得抽搐
+    seconds: 14,
+    gain: 1,                // 整体幅度倍率：觉得晃得厉害就调到 0.6，想夸张就 1.4
+    // 想让她跟着指定曲子跳，填绝对路径（mp3/wav/ogg）。
+    // 留空则用内置合成节拍（底鼓 + 踩镲）—— 有声音锚，动作才不像抽动。
+    music: '',
+  },
 }
 
 function expandEnv(value) {
@@ -94,6 +102,7 @@ function load(rootDir, log = console.log) {
     voice: { ...DEFAULTS.voice, ...(user.voice || {}) },
     asr: { ...DEFAULTS.asr, ...(user.asr || {}) },
     vision: { ...DEFAULTS.vision, ...(user.vision || {}) },
+    dance: { ...DEFAULTS.dance, ...(user.dance || {}) },
   }
   cfg.brain.apiKey = expandEnv(cfg.brain.apiKey)
 

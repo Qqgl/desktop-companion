@@ -634,16 +634,110 @@
 
   let danceTimer = null
 
+  // ---------------------------------------------------------------- 伴奏
+  //
+  // 动作光有节拍没有声音，看起来就像抽搐 —— 耳朵没有可以对齐的东西。
+  // 所以律动一定带声音：优先播用户指定的曲子，没有就合成一个底鼓+踩镲的节拍。
+  let beatGain = null
+  let danceAudio = null
+
+  function stopBeat() {
+    if (beatGain) {
+      try {
+        const ac = ensureAudio()
+        beatGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.05)
+      } catch { /* 已经没了 */ }
+      beatGain = null
+    }
+    if (danceAudio) {
+      try { danceAudio.pause() } catch { /* 已停 */ }
+      danceAudio = null
+    }
+  }
+
+  function kickAt(ac, out, t) {
+    const o = ac.createOscillator()
+    const g = ac.createGain()
+    o.frequency.setValueAtTime(105, t)
+    o.frequency.exponentialRampToValueAtTime(44, t + 0.11)
+    g.gain.setValueAtTime(0.9, t)
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.24)
+    o.connect(g).connect(out)
+    o.start(t)
+    o.stop(t + 0.28)
+  }
+
+  function hatAt(ac, out, t, level = 0.16) {
+    const len = 0.05
+    const buf = ac.createBuffer(1, Math.ceil(ac.sampleRate * len), ac.sampleRate)
+    const d = buf.getChannelData(0)
+    for (let i = 0; i < d.length; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 4)
+    }
+    const s = ac.createBufferSource()
+    s.buffer = buf
+    const f = ac.createBiquadFilter()
+    f.type = 'highpass'
+    f.frequency.value = 7000
+    const g = ac.createGain()
+    g.gain.value = level
+    s.connect(f).connect(g).connect(out)
+    s.start(t)
+  }
+
+  /** 合成一段 4/4 底鼓+踩镲，和律动用的是同一个 BPM */
+  function startBeat(bpm, seconds) {
+    const ac = ensureAudio()
+    // 保险：某些情况下 AudioContext 会是 suspended，不 resume 就没有声音
+    if (ac.state === 'suspended') ac.resume().catch(() => {})
+
+    const beat = 60 / bpm
+    const master = ac.createGain()
+    master.gain.value = 0.22
+    master.connect(ac.destination)
+    beatGain = master
+
+    const t0 = ac.currentTime + 0.08
+    const total = Math.ceil(seconds / beat)
+    for (let i = 0; i < total; i++) {
+      const t = t0 + i * beat
+      if (i % 2 === 0) kickAt(ac, master, t)          // 每两拍一个底鼓（4/4 的 1、3 拍）
+      hatAt(ac, master, t, 0.1)                       // 正拍轻踩镲
+      hatAt(ac, master, t + beat / 2, 0.18)           // 反拍重一点
+    }
+    console.warn('[dance] 排了', total, '拍，AudioContext =', ac.state)
+  }
+
+  function startMusic(url, bpm, seconds) {
+    try {
+      const a = new Audio(url)
+      a.volume = 0.5
+      a.play().catch(() => {
+        console.warn('[dance] 音乐放不出来，退回合成节拍')
+        startBeat(bpm, seconds)
+      })
+      danceAudio = a
+    } catch {
+      startBeat(bpm, seconds)
+    }
+  }
+
   if (window.companion.onDance) {
     window.companion.onDance((opt) => {
-      const { bpm, seconds } = opt || {}
-      rig.startDance({ bpm: bpm || 100, seconds: seconds || 12 })
+      const { seconds = 14, music = '', bpm = 76, gain = 1 } = opt || {}
+      rig.startDance({ bpm, seconds, gain })
+
+      stopBeat()
+      if (music) startMusic(music, bpm, seconds)
+      else startBeat(bpm, seconds)
+
       clearTimeout(danceTimer)
       danceTimer = setTimeout(() => {
         rig.stopDance()
+        stopBeat()
         console.warn('[dance] 结束')
-      }, ((seconds || 12) + 0.6) * 1000)
-      console.warn('[dance] 开始', bpm || 100, 'BPM', seconds || 12, 's')
+      }, (seconds + 0.6) * 1000)
+      console.warn('[dance] 开始', bpm, 'BPM', seconds, 's', music ? '带音乐' : '合成节拍')
     })
   }
 
@@ -651,6 +745,7 @@
     window.companion.onDanceStop(() => {
       clearTimeout(danceTimer)
       rig.stopDance()
+      stopBeat()
     })
   }
 

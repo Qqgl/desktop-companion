@@ -221,13 +221,13 @@ const DEFS = [
     function: {
       name: 'dance',
       description:
-        '让她跟着节拍律动一段（身体起伏、点头、甩尾巴）。' +
+        '让她跟着节拍律动一段（身体起伏、点头、甩尾巴），并播放伴奏。' +
         '用户说「跳个舞」「扭一段」「动起来」时用。她没有关节，做不出具体舞蹈动作，只能跟拍子晃。',
       parameters: {
         type: 'object',
         properties: {
-          seconds: { type: 'number', description: '跳多久，默认 12 秒' },
-          bpm: { type: 'number', description: '节奏快慢，默认 100，范围 60~180' },
+          seconds: { type: 'number', description: '跳多久，默认 14 秒' },
+          bpm: { type: 'number', description: '节奏快慢，默认 76，范围 50~160' },
         },
       },
     },

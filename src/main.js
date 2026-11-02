@@ -244,15 +244,28 @@ function personaName() {
   return (cfg && cfg.persona && cfg.persona.name) || ''
 }
 
+/** 开始律动：把节奏、时长、伴奏一起交给渲染进程 */
+function startDance(args) {
+  const dc = (cfg && cfg.dance) || {}
+  const bpm = Math.max(50, Math.min(160, Number(args && args.bpm) || Number(dc.bpm) || 76))
+  const seconds = Math.max(3, Math.min(60, Number(args && args.seconds) || Number(dc.seconds) || 14))
+  const gain = Math.max(0.2, Math.min(2, Number(dc.gain) || 1))
+  let music = ''
+  if (dc.music) {
+    try {
+      music = toFileUrl(path.resolve(dc.music))
+    } catch { /* 路径不合法就当没配 */ }
+  }
+  if (win && !win.isDestroyed()) win.webContents.send('dance:start', { bpm, seconds, music, gain })
+  log('[dance]', bpm, 'bpm', seconds, 's gain=', gain, music ? `伴奏=${dc.music}` : '合成节拍')
+}
+
 /** 工具执行器：真正"动手"的地方在 tools.js，这里提供 electron 的 shell 和眼睛 */
 function execTool(name, args) {
   // 律动要驱动渲染进程，不走 tools.js
   if (name === 'dance') {
-    const bpm = Math.max(60, Math.min(180, Number(args && args.bpm) || 100))
-    const seconds = Math.max(3, Math.min(60, Number(args && args.seconds) || 12))
-    if (win && !win.isDestroyed()) win.webContents.send('dance:start', { bpm, seconds })
-    log('[dance]', bpm, 'bpm', seconds, 's')
-    return Promise.resolve({ ok: true, said: `跳 ${seconds} 秒，${bpm} BPM` })
+    startDance(args)
+    return Promise.resolve({ ok: true, said: '开跳了' })
   }
 
   const eyes = {
@@ -344,8 +357,7 @@ function refreshTrayMenu() {
     {
       label: '跳个舞',
       click: () => {
-        if (win && !win.isDestroyed()) win.webContents.send('dance:start', { bpm: 100, seconds: 12 })
-        log('[dance] 托盘触发')
+        startDance()
       },
     },
     {
@@ -1050,10 +1062,10 @@ function runSnapshot() {
 
         // 自检：让她跳起来，配合 --shots 连拍看幅度
         if (hasFlag('--dance')) {
-          const bpm = Number(flagValue('--bpm', 100)) || 100
-          win.webContents.send('dance:start', { bpm, seconds: 60 })
-          log('[snapshot] dance started', bpm, 'bpm')
-          await sleep(700)   // 等淡入
+          const bpm = Number(flagValue('--bpm', 0)) || undefined
+          startDance(bpm ? { bpm } : undefined)
+          log('[snapshot] dance started')
+          await sleep(1200)   // 等淡入（0.5s 到位）
         }
 
         // 自检：假装护栏决定开口了，看看视觉长什么样
