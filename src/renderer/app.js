@@ -136,8 +136,12 @@
 
   if (window.companion.onCursor) {
     window.companion.onCursor((p) => {
-      if (pointer.inside) return
-      lookAt(p.x, p.y)
+      // 主进程每 90ms 推一次全局光标位置。这条路**不依赖底层鼠标钩子**，
+      // 所以在"前台是更高权限窗口、钩子被 UIPI 拦掉"的时候仍然有效。
+      // 命中测试必须也走这条路，否则窗口会一直卡在穿透状态：
+      // 点她没反应，而且没有任何报错。
+      if (!pointer.inside) lookAt(p.x, p.y)
+      updateHit(p.x, p.y)
     })
   }
 

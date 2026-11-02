@@ -671,8 +671,14 @@ function handleForegroundLine(line) {
 // ---------------------------------------------------------------- IPC
 
 function wireIpc() {
+  let lastIgnore = null
   ipcMain.on('hit:set', (_e, ignore) => {
     if (win) win.setIgnoreMouseEvents(!!ignore, { forward: true })
+    // 只在状态翻转时记一行：排查"点不动她"时，这一行就是关键证据
+    if (ignore !== lastIgnore) {
+      lastIgnore = ignore
+      log('[hit] 鼠标穿透 =', ignore)
+    }
   })
 
   ipcMain.on('drag:start', () => startDrag())
@@ -1023,7 +1029,13 @@ if (!gotLock) {
       startFullscreenWatch()
 
       const hookOk = hotkey.start({
-        onStart: () => { if (win) win.webContents.send('ptt:start') },
+        onStart: () => {
+          // 这一行是排查"按 Alt 没反应"的关键证据：
+          // 如果按下时日志里没有它，说明按键事件根本没到达（大概率是被
+          // 更高权限的前台窗口用 UIPI 拦掉了底层键盘钩子）
+          log('[ptt] start')
+          if (win) win.webContents.send('ptt:start')
+        },
         onStop: () => { if (win) win.webContents.send('ptt:stop') },
         // 全局 mouseup：鼠标松在窗口外时也能正确结束拖拽
         onMouseUp: () => { if (dragTimer) stopDrag() },
