@@ -144,12 +144,12 @@ rig.startDance({ bpm: 100, seconds: 6 })
 const dy = []
 const dx = []
 const dTail = []
-// 注意：step(n) 是"n 帧"，不是毫秒。180 帧 ≈ 3 秒，仍在 6 秒的舞里
+// 注意：律动的尾巴分量绕过弹簧（避免共振），要量的是输出值 tailAngleOut
 for (let i = 0; i < 180; i++) {
   step(1)
   dy.push(rig.floatY)
   dx.push(rig.headX.value)
-  dTail.push(rig.tailAngle.value)
+  dTail.push(rig.tailAngleOut)
 }
 
 const range = (a) => Math.max(...a) - Math.min(...a)

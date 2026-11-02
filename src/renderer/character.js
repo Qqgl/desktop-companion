@@ -774,7 +774,13 @@
       const def = t.def
       const pivot = def.pivot || [205, 480]
       const maxA = Number(def.maxAngle) || 6
-      const deg = Math.max(-maxA, Math.min(maxA, rig.tailAngle ? rig.tailAngle.value : 0))
+      // tailAngleOut = 弹簧结果 + 律动的节拍分量（后者绕过弹簧，避免共振）。
+      // 早先只用 tailAngle.value，跳舞时会被 maxAngle 限幅卡住顶到边上，
+      // 看起来就是"抖"——幅度超了，不是曲线有问题。
+      const raw = typeof rig.tailAngleOut === 'number'
+        ? rig.tailAngleOut
+        : (rig.tailAngle ? rig.tailAngle.value : 0)
+      const deg = Math.max(-maxA, Math.min(maxA, raw))
 
       const px = bx + pivot[0] * this.scale
       const py = this.baseY + pivot[1] * this.scale

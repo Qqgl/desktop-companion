@@ -102,16 +102,22 @@
       // 律动：不是"舞蹈动作"，是跟着节拍的整体起伏。
       // 她的身体是一张图，没有关节可以掰；但整层在动 + 尾巴滞后半拍，
       // 看起来就是"在跟拍子晃"。amp 是淡入淡出的包络，避免突然开始/结束。
-      this.dance = { on: false, bpm: 100, phase: 0, amp: 0, until: 0 }
+      this.dance = { on: false, bpm: 88, phase: 0, amp: 0, until: 0 }
+      this.danceTail = 0   // 节拍驱动的尾巴角度（度），绕过弹簧叠加到输出上
 
       this.setPoseTargets('idle', true)
     }
 
+    /** 尾巴最终角度 = 弹簧结果 + 节拍分量 */
+    get tailAngleOut() {
+      return this.tailAngle.value + this.danceTail
+    }
+
     /** 开始律动。seconds 之后自动停 */
-    startDance({ bpm = 100, seconds = 12 } = {}) {
+    startDance({ bpm = 88, seconds = 12 } = {}) {
       const d = this.dance
       d.on = true
-      d.bpm = clamp(Number(bpm) || 100, 60, 180)
+      d.bpm = clamp(Number(bpm) || 88, 60, 180)
       d.until = this.t + (Number(seconds) || 12)
       // 相位从当前节拍位置接着走，反复触发不会卡顿
       this.setState('dance')
@@ -203,24 +209,41 @@
       if (!d.on && d.amp < 0.02 && this.state === 'dance') this.setState('idle')
 
       const da = d.amp
-      const beat = d.phase
-      // 每拍下沉一次（用 |sin| 的正半周，落点干脆）
-      // 幅度：她只有 424px 高，6px 的起伏肉眼几乎看不出，要 12px 才有"跳"的感觉
-      const dip = -Math.max(0, Math.sin(beat)) * 12 * da
-      const swayX = Math.sin(beat / 2) * 7 * da
-      // 每一拍再加一点左右换重心，不然看着像上下弹而不是在跳
-      const stepX = Math.sin(beat) * 2.2 * da
-      const headLag = -Math.max(0, Math.sin(beat - 0.6)) * 5.5 * da
-      const headTilt = Math.sin(beat / 2 + 1.1) * 7 * da
-      const tailBeat = Math.sin(beat - 1.0) * 14 * da
-      const ahogeBeat = Math.sin(beat - 1.4) * 9 * da
+      const p = d.phase
+
+      // 一拍一个 0→1→0 的平滑包络，两端速度为 0，没有折角。
+      // 之前用 |sin| 正半周，拍子交界处是尖的，眼睛看到的就是"抖"。
+      const pulse = (ph) => (1 - Math.cos(ph)) / 2
+
+      // 重心：两拍一个来回（左-右-左），这才是"舞"的基本周期
+      const weight = Math.sin(p / 2)
+
+      // 滞后用弧度表示，1 拍 = 2π。
+      // 之前写成 sin(beat - 0.6)，0.6 弧度≈0.1 拍，等于没滞后，所以看着像一起抖。
+      const LAG_HEAD = 1.4      // ≈0.22 拍
+      const LAG_TAIL = 1.8      // ≈0.29 拍（再大就接近反相，尾巴会跟身体对着摆）
+      const LAG_AHOGE = 2.4     // ≈0.38 拍
+
+      const dip = -12 * da * pulse(p)
+      const swayX = 7 * da * weight
+      const headDip = -5 * da * pulse(p - LAG_HEAD)
+      // 头发直接吃弹簧，所以给小一点：弹簧在 0.7Hz 附近有 2 倍放大
+      const headTilt = 3.5 * da * Math.sin(p / 2 - LAG_HEAD)
+      const ahogeBeat = 4 * da * Math.sin(p / 2 - LAG_AHOGE)
+      // 尾巴不走弹簧。它固有频率 0.57Hz，跟重心摆动 0.73Hz 撞上了，
+      // 交给弹簧会共振：实测摆到 22°、滞后 0.94 拍（几乎反相）。
+      // 节拍分量单独算，再和弹簧的输出相加。
+      // 幅度控制在 8°：manifest 的 maxAngle 是 12，留出余量，
+      // 否则会一直顶在限幅边界上（饱和），看起来就是"卡住不动"或者"抖"
+      this.danceTail = 8 * da * Math.sin(p / 2 - LAG_TAIL)
 
       // 漂浮：聆听时几乎不动，说话时起伏大一点
       const floatAmp = this.state === 'listening' ? 1.1 : 2.6
       this.floatY = Math.sin(t * TAU / (5.6 / bob)) * floatAmp + 2.2 + this.lean.value * 1.6 + dip
 
-      // 呼吸跟着拍子加重一点，整层缩放会带出"发力"的感觉
-      this.breath += Math.sin(beat) * 0.45 * da
+      // 呼吸只加一点点，别让它变成高频缩放。
+      // 之前加 0.45，整层以 1.6Hz 抽动，看起来就是"抖"而不是"跳"。
+      this.breath += Math.sin(p) * 0.1 * da
 
       // 思考时的高频微颤
       if (this.state === 'thinking') {
@@ -233,8 +256,8 @@
 
       // ---------- 头部跟随 ----------
       const lookGain = this.state === 'listening' ? 7.5 : 6.5
-      this.headX.target = lx * lookGain + this.jitter.x + swayX + stepX
-      this.headY.target = ly * 3.2 + this.jitter.y + this.lean.value * 1.2 + headLag
+      this.headX.target = lx * lookGain + this.jitter.x + swayX
+      this.headY.target = ly * 3.2 + this.jitter.y + this.lean.value * 1.2 + headDip
       this.headX.step(dt)
       this.headY.step(dt)
 
@@ -250,8 +273,7 @@
       this.tailAngle.target =
         -lx * 2.6 +
         Math.sin(t * 1.15 + 0.6) * 1.15 +
-        Math.sin(t * 0.43) * 0.5 +
-        tailBeat
+        Math.sin(t * 0.43) * 0.5
       this.hairX.step(dt)
       this.lockL.step(dt)
       this.lockR.step(dt)
