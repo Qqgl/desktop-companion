@@ -44,4 +44,8 @@ contextBridge.exposeInMainWorld('companion', {
   // ---------------- 主动开口 ----------------
   onProactiveSay: (cb) => ipcRenderer.on('proactive:say', (_e, t) => cb(t)),
   onProactiveMuted: (cb) => ipcRenderer.on('proactive:muted', () => cb()),
+
+  // ---------------- 律动 ----------------
+  onDance: (cb) => ipcRenderer.on('dance:start', (_e, o) => cb(o)),
+  onDanceStop: (cb) => ipcRenderer.on('dance:stop', () => cb()),
 })

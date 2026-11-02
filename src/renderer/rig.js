@@ -39,6 +39,8 @@
     thinking:  { lean: 0.30, tilt: 0.45, eye: 0.88, glow: 0.35, bob: 0.70 },
     speaking:  { lean: 0.45, tilt: 0.10, eye: 1.00, glow: 0.50, bob: 1.25 },
     quiet:     { lean: -0.55, tilt: 0.30, eye: 0.55, glow: 0.00, bob: 0.35 },
+    // 律动：眼睛睁大一点、光晕亮起来，身体起伏交给 dance 曲线驱动
+    dance:     { lean: 0.20, tilt: 0.05, eye: 1.10, glow: 0.85, bob: 1.30 },
   }
 
   const BLINK_DUR = 0.26
@@ -97,7 +99,32 @@
       this.floatY = 0
       this.jitter = { x: 0, y: 0 }
 
+      // 律动：不是"舞蹈动作"，是跟着节拍的整体起伏。
+      // 她的身体是一张图，没有关节可以掰；但整层在动 + 尾巴滞后半拍，
+      // 看起来就是"在跟拍子晃"。amp 是淡入淡出的包络，避免突然开始/结束。
+      this.dance = { on: false, bpm: 100, phase: 0, amp: 0, until: 0 }
+
       this.setPoseTargets('idle', true)
+    }
+
+    /** 开始律动。seconds 之后自动停 */
+    startDance({ bpm = 100, seconds = 12 } = {}) {
+      const d = this.dance
+      d.on = true
+      d.bpm = clamp(Number(bpm) || 100, 60, 180)
+      d.until = this.t + (Number(seconds) || 12)
+      // 相位从当前节拍位置接着走，反复触发不会卡顿
+      this.setState('dance')
+      return { bpm: d.bpm, seconds: Number(seconds) || 12 }
+    }
+
+    stopDance() {
+      this.dance.on = false
+      if (this.state === 'dance') this.setState('idle')
+    }
+
+    get dancing() {
+      return this.dance.on
     }
 
     setState(name) {
@@ -163,9 +190,37 @@
       const raw = (Math.sin(t * TAU / 4.2 * bob) + 1) / 2
       this.breath = Math.pow(raw, 1.35) * 2 - 1
 
+      // ---------- 律动 ----------
+      // 一拍一次下沉、两拍一次左右摆，头和尾巴各晚半拍跟上。
+      // amp 是包络：开始时不硬切，结束时慢慢松掉。
+      const d = this.dance
+      d.amp = lerp(d.amp, d.on ? 1 : 0, 1 - Math.exp(-dt * 5))
+      if (d.on) {
+        d.phase += dt * (d.bpm / 60) * TAU
+        if (t > d.until) d.on = false
+      }
+      // 停止后 amp 归零就回 idle
+      if (!d.on && d.amp < 0.02 && this.state === 'dance') this.setState('idle')
+
+      const da = d.amp
+      const beat = d.phase
+      // 每拍下沉一次（用 |sin| 的正半周，落点干脆）
+      // 幅度：她只有 424px 高，6px 的起伏肉眼几乎看不出，要 12px 才有"跳"的感觉
+      const dip = -Math.max(0, Math.sin(beat)) * 12 * da
+      const swayX = Math.sin(beat / 2) * 7 * da
+      // 每一拍再加一点左右换重心，不然看着像上下弹而不是在跳
+      const stepX = Math.sin(beat) * 2.2 * da
+      const headLag = -Math.max(0, Math.sin(beat - 0.6)) * 5.5 * da
+      const headTilt = Math.sin(beat / 2 + 1.1) * 7 * da
+      const tailBeat = Math.sin(beat - 1.0) * 14 * da
+      const ahogeBeat = Math.sin(beat - 1.4) * 9 * da
+
       // 漂浮：聆听时几乎不动，说话时起伏大一点
       const floatAmp = this.state === 'listening' ? 1.1 : 2.6
-      this.floatY = Math.sin(t * TAU / (5.6 / bob)) * floatAmp + 2.2 + this.lean.value * 1.6
+      this.floatY = Math.sin(t * TAU / (5.6 / bob)) * floatAmp + 2.2 + this.lean.value * 1.6 + dip
+
+      // 呼吸跟着拍子加重一点，整层缩放会带出"发力"的感觉
+      this.breath += Math.sin(beat) * 0.45 * da
 
       // 思考时的高频微颤
       if (this.state === 'thinking') {
@@ -178,24 +233,25 @@
 
       // ---------- 头部跟随 ----------
       const lookGain = this.state === 'listening' ? 7.5 : 6.5
-      this.headX.target = lx * lookGain + this.jitter.x
-      this.headY.target = ly * 3.2 + this.jitter.y + this.lean.value * 1.2
+      this.headX.target = lx * lookGain + this.jitter.x + swayX + stepX
+      this.headY.target = ly * 3.2 + this.jitter.y + this.lean.value * 1.2 + headLag
       this.headX.step(dt)
       this.headY.step(dt)
 
       // ---------- 头发：滞后 + 跟随 ----------
       // 目标取头部位置的放大值，刚度低 → 天然滞后半拍
       this.hairX.target = lx * 5.0
-      this.lockL.target = lx * 9.0 - this.tilt.value * 6
-      this.lockR.target = lx * 4.0 - this.tilt.value * 6
-      this.ahoge.target = lx * 11.5 + Math.sin(t * 2.3) * 1.4
+      this.lockL.target = lx * 9.0 - this.tilt.value * 6 + headTilt
+      this.lockR.target = lx * 4.0 - this.tilt.value * 6 + headTilt * 0.6
+      this.ahoge.target = lx * 11.5 + Math.sin(t * 2.3) * 1.4 + ahogeBeat
       this.tailX.target = lx * 4.6 + Math.sin(t * 1.7 + 1.1) * 0.8
       // 尾巴的摆角（度）。刚度刻意比 hairX 更低：它比整个人慢半拍，
       // 才会有"重量"感；跟随方向与头部相反，因为尾巴拖在后面。
       this.tailAngle.target =
         -lx * 2.6 +
         Math.sin(t * 1.15 + 0.6) * 1.15 +
-        Math.sin(t * 0.43) * 0.5
+        Math.sin(t * 0.43) * 0.5 +
+        tailBeat
       this.hairX.step(dt)
       this.lockL.step(dt)
       this.lockR.step(dt)

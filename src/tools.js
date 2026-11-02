@@ -219,6 +219,22 @@ const DEFS = [
   {
     type: 'function',
     function: {
+      name: 'dance',
+      description:
+        '让她跟着节拍律动一段（身体起伏、点头、甩尾巴）。' +
+        '用户说「跳个舞」「扭一段」「动起来」时用。她没有关节，做不出具体舞蹈动作，只能跟拍子晃。',
+      parameters: {
+        type: 'object',
+        properties: {
+          seconds: { type: 'number', description: '跳多久，默认 12 秒' },
+          bpm: { type: 'number', description: '节奏快慢，默认 100，范围 60~180' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'look_at_screen',
       description:
         '看一眼用户当前的屏幕，回答关于它的问题。用户说「帮我看看这个」「屏幕上是什么」「这报错什么意思」时用。' +

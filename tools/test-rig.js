@@ -134,5 +134,42 @@ check('但也不至于迟钝（1800ms 内到位）', tail90 < 1800, `${tail90}ms
 check('有回摆但不过头（0~1.5°）', over > 0.02 && over < 1.5, `${over.toFixed(3)}°`)
 check('静止时在 0 附近微晃', Math.abs(baseAngle) < 2.5, `${baseAngle.toFixed(2)}°`)
 
+// ---------------------------------------------------------------- 律动
+// 她没有关节，"跳舞"只能是跟拍子整体起伏。
+// 要验：① 真的在动 ② 幅度够看得出来 ③ 时间到了会自己停
+
+rig.setLook(0, 0)
+step(30)
+rig.startDance({ bpm: 100, seconds: 6 })
+const dy = []
+const dx = []
+const dTail = []
+// 注意：step(n) 是"n 帧"，不是毫秒。180 帧 ≈ 3 秒，仍在 6 秒的舞里
+for (let i = 0; i < 180; i++) {
+  step(1)
+  dy.push(rig.floatY)
+  dx.push(rig.headX.value)
+  dTail.push(rig.tailAngle.value)
+}
+
+const range = (a) => Math.max(...a) - Math.min(...a)
+const ry = range(dy)
+const rx = range(dx)
+const rt = range(dTail)
+
+console.log(`\n律动：上下 ${ry.toFixed(1)}px / 左右 ${rx.toFixed(1)}px / 尾巴 ${rt.toFixed(1)}°`)
+console.log(`      状态 ${rig.state}，包络 amp=${rig.dance.amp.toFixed(2)}`)
+
+check('律动时身体上下明显起伏（> 10px）', ry > 10, `${ry.toFixed(1)}px`)
+check('律动时左右有摆动（> 5px）', rx > 5, `${rx.toFixed(1)}px`)
+check('律动时尾巴跟着甩（> 3°）', rt > 3, `${rt.toFixed(1)}°`)
+check('律动时状态是 dance', rig.state === 'dance', rig.state)
+
+// 跑过 seconds 之后应该自己停
+step(4000)
+check('时间到了会自己停下', rig.dance.on === false || rig.dance.amp < 0.05, `on=${rig.dance.on} amp=${rig.dance.amp.toFixed(2)}`)
+step(1500)
+check('停下后回到 idle', rig.state === 'idle', rig.state)
+
 console.log(`\n===== ${pass} passed, ${fail} failed =====`)
 process.exit(fail ? 1 : 0)

@@ -630,6 +630,30 @@
     })
   }
 
+  // ---------------------------------------------------------------- 律动
+
+  let danceTimer = null
+
+  if (window.companion.onDance) {
+    window.companion.onDance((opt) => {
+      const { bpm, seconds } = opt || {}
+      rig.startDance({ bpm: bpm || 100, seconds: seconds || 12 })
+      clearTimeout(danceTimer)
+      danceTimer = setTimeout(() => {
+        rig.stopDance()
+        console.warn('[dance] 结束')
+      }, ((seconds || 12) + 0.6) * 1000)
+      console.warn('[dance] 开始', bpm || 100, 'BPM', seconds || 12, 's')
+    })
+  }
+
+  if (window.companion.onDanceStop) {
+    window.companion.onDanceStop(() => {
+      clearTimeout(danceTimer)
+      rig.stopDance()
+    })
+  }
+
   // ---------------------------------------------------------------- PTT
 
   let replyTimer = null
