@@ -59,6 +59,9 @@ const DEFAULTS = {
     // 前台是全屏应用时自动躲开。注意：**最大化窗口不算全屏**，
     // 判定用的是 DWM 可见边界 + 有无标题栏，见 tools/foreground-watch.ps1
     autoHideFullscreen: true,
+    // 锁住纵向拖动：立绘只画到腰，往上拖会露出"没有腿"。
+    // 横向不受影响，可以随便拖；设成 false 就完全自由。
+    lockY: true,
     // 收起来之后，鼠标划过她的位置再出现
     hoverReveal: true,
     hoverMargin: 28,        // 鼠标离她多近算"划过来"，单位像素

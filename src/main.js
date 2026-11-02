@@ -177,7 +177,9 @@ function clampToScreen(x, y) {
 // ---------------------------------------------------------------- 窗口
 
 function createWindow() {
-  const pos = savedPos ? clampToScreen(savedPos.x, savedPos.y) : defaultPosition()
+  const saved = savedPos ? clampToScreen(savedPos.x, savedPos.y) : defaultPosition()
+  // 上次可能停在偏上的位置（旧版本允许往上拖），启动时也拉回锚点
+  const pos = { x: saved.x, y: clampDragY(saved.x, saved.y) }
 
   win = new BrowserWindow({
     width: WIN_W,
@@ -326,19 +328,7 @@ function refreshTrayMenu() {
   if (!tray) return
   const visible = win ? win.isVisible() : false
   const menu = Menu.buildFromTemplate([
-    { label: visible ? '让它躲起来' : '叫它出来', click: () => toggleVisible() },
-    {
-      label: '收起来（鼠标划过再出现）',
-      click: () => {
-        if (!win) return
-        tuckAway = true
-        hoverArmed = false
-        hoverRevealed = false
-        win.hide()
-        refreshTrayMenu()
-        log('[hover] 已收起，等待鼠标划过')
-      },
-    },
+    { label: visible ? '收起来（鼠标划过再出现）' : '叫它出来', click: () => toggleVisible() },
     { type: 'separator' },
     {
       label: '开机自启（延迟 10 秒）',
@@ -479,6 +469,21 @@ function recenter() {
 let dragTimer = null
 let dragOffset = null
 
+/**
+ * 纵向限位。
+ *
+ * 她的立绘只画到腰（fit.bottom 也是按"藏在任务栏后面"算的），
+ * 往上拖会把下面那段空白露出来 —— 看起来就是"没有腿"。所以横向随便拖，
+ * 纵向只允许往下沉，不允许往上浮。config.window.lockY 可以关掉这个限制。
+ */
+function clampDragY(x, y) {
+  if (cfg.window.lockY === false) return y
+  const disp = screen.getDisplayNearestPoint({ x: x + WIN_W / 2, y: y + WIN_H / 2 })
+  const a = disp.workArea
+  const anchor = Math.round(a.y + a.height - WIN_H)   // 窗口底边贴住工作区底边的位置
+  return Math.max(y, anchor)                          // 只能 >= 锚点（往下），不能往上
+}
+
 function startDrag() {
   if (!win || dragTimer) return
   const b = win.getBounds()
@@ -490,7 +495,9 @@ function startDrag() {
   dragTimer = setInterval(() => {
     if (!win) return stopDrag()
     const cur = screen.getCursorScreenPoint()
-    win.setPosition(Math.round(cur.x - dragOffset.dx), Math.round(cur.y - dragOffset.dy))
+    const nx = Math.round(cur.x - dragOffset.dx)
+    const ny = Math.round(cur.y - dragOffset.dy)
+    win.setPosition(nx, clampDragY(nx, ny))
     // 兜底：鼠标松在窗口外时收不到 mouseup，用「一段时间不动」结束拖动
     if (cur.x === last.x && cur.y === last.y) {
       still += 16
