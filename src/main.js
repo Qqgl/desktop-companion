@@ -114,6 +114,11 @@ let tray = null
 let watcher = null
 let dnd = false
 let hiddenByFullscreen = false
+// 收起状态：tuckAway 表示"是用户主动收的"，只有这种才允许悬浮唤出；
+// hoverArmed 是迟滞开关，hoverRevealed 记录当前是悬浮唤出来的
+let tuckAway = false
+let hoverArmed = false
+let hoverRevealed = false
 
 let cfg = null
 let brain = null
@@ -322,6 +327,18 @@ function refreshTrayMenu() {
   const visible = win ? win.isVisible() : false
   const menu = Menu.buildFromTemplate([
     { label: visible ? '让它躲起来' : '叫它出来', click: () => toggleVisible() },
+    {
+      label: '收起来（鼠标划过再出现）',
+      click: () => {
+        if (!win) return
+        tuckAway = true
+        hoverArmed = false
+        hoverRevealed = false
+        win.hide()
+        refreshTrayMenu()
+        log('[hover] 已收起，等待鼠标划过')
+      },
+    },
     { type: 'separator' },
     {
       label: '开机自启（延迟 10 秒）',
@@ -427,8 +444,14 @@ function applyDnd() {
 
 function toggleVisible() {
   if (!win) return
-  if (win.isVisible()) win.hide()
-  else {
+  if (win.isVisible()) {
+    tuckAway = true          // 允许鼠标划过来唤出
+    hoverArmed = false       // 光标还在她身上时不能立刻弹回去
+    hoverRevealed = false
+    win.hide()
+  } else {
+    tuckAway = false
+    hoverRevealed = false
     win.showInactive()
     recenterIfOffscreen()
   }
@@ -492,16 +515,58 @@ function stopDrag() {
 // ---------------------------------------------------------------- 全局光标
 
 /**
- * 每 90ms 把全局光标位置（窗口内坐标）推给渲染进程。
- * 这样鼠标在窗口外时她也会转头 —— 窗口只有 360x620，靠 DOM 事件做不到。
+ * 每 90ms 做三件事：
+ *  1. 把全局光标位置（窗口内坐标）推给渲染进程 —— 这样鼠标在窗口外时她也会转头
+ *  2. 收起来的时候，鼠标划过她的位置就把她唤出来（带迟滞，见下）
+ *  3. 定时重新压一次置顶，防止被别的窗口抢走
  */
 function startCursorBeacon() {
   if (!win) return
+  let tick = 0
+
   setInterval(() => {
-    if (!win || win.isDestroyed() || !win.isVisible()) return
+    if (!win || win.isDestroyed()) return
+
     const b = win.getBounds()
     const c = screen.getCursorScreenPoint()
+    const m = Number(cfg.window.hoverMargin) || 28
+    const inside =
+      c.x >= b.x - m && c.x <= b.x + b.width + m &&
+      c.y >= b.y - m && c.y <= b.y + b.height + m
+
+    // ---------------- 收起来时的唤醒 ----------------
+    if (!win.isVisible()) {
+      // 迟滞：刚藏起来时光标还在她的范围里，必须先离开一次才能再唤醒，
+      // 否则会「藏起来→立刻弹出」无限弹跳
+      if (!hoverArmed) {
+        if (!inside) hoverArmed = true
+        return
+      }
+      if (tuckAway && cfg.window.hoverReveal !== false && !dnd && inside) {
+        win.showInactive()
+        hoverRevealed = true
+        hoverArmed = false
+        refreshTrayMenu()
+        log('[hover] 鼠标划过，出来')
+      }
+      return
+    }
+
     win.webContents.send('cursor:point', { x: c.x - b.x, y: c.y - b.y })
+
+    // 悬浮唤出来的，鼠标离开就再收回去
+    if (hoverRevealed && !inside) {
+      hoverRevealed = false
+      win.hide()
+      refreshTrayMenu()
+      log('[hover] 鼠标离开，收回去')
+      return
+    }
+
+    // 每 ~5 秒重新压一次置顶
+    if (cfg.window.keepTopmost !== false && ++tick % 55 === 0) {
+      win.setAlwaysOnTop(true, 'screen-saver')
+    }
   }, 90)
 }
 
@@ -563,14 +628,15 @@ function startFullscreenWatch() {
 }
 
 function handleForegroundLine(line) {
-  // 协议: "类名 左 上 宽 高"
+  // 协议: "类名 左 上 宽 高 有无标题栏"
   const parts = line.split(/\s+/)
-  if (parts.length !== 5) return
+  if (parts.length < 5) return
   const cls = parts[0]
   // 桌面本身、任务栏、壁纸宿主不算「全屏应用」
   if (/^(Progman|WorkerW|Shell_TrayWnd|Shell_SecondaryTrayWnd|Windows\.UI\.Core\.CoreWindow)$/i.test(cls)) return
 
-  const [l, t, w, h] = parts.slice(1).map(Number)
+  const [l, t, w, h] = parts.slice(1, 5).map(Number)
+  const hasCaption = parts[5] === '1'
   if ([l, t, w, h].some((n) => !Number.isFinite(n))) return
   if (w <= 0 || h <= 0) return
 
@@ -584,14 +650,21 @@ function handleForegroundLine(line) {
   const scale = disp.scaleFactor || 1
   const dw = disp.bounds.width * scale
   const dh = disp.bounds.height * scale
-  const covers = w >= dw - 8 && h >= dh - 8
+  // 侧车给的是 DWM 可见边界（不含最大化时那圈隐形边框），
+  // 所以最大化窗口的可见高度 = 工作区，比屏幕矮，这里天然不会成立。
+  const covers = w >= dw - 6 && h >= dh - 6
+  // 有标题栏的一律不算全屏：全屏游戏/播放器都不会保留 WS_CAPTION。
+  // 这条是兜底 —— 万一某个最大化窗口的可见边界恰好铺满屏幕。
+  const fullscreen = covers && !hasCaption && cfg.window.autoHideFullscreen !== false
 
-  if (covers && !hiddenByFullscreen && !IS_SNAPSHOT) {
+  if (fullscreen && !hiddenByFullscreen && !IS_SNAPSHOT) {
     hiddenByFullscreen = true
     if (win && !dnd) win.hide()
-  } else if (!covers && hiddenByFullscreen) {
+    log('[fullscreen] 前台是全屏应用，先躲起来', cls)
+  } else if (!fullscreen && hiddenByFullscreen) {
     hiddenByFullscreen = false
-    if (win && !dnd && win.isVisible() === false) win.showInactive()
+    if (win && !dnd && !win.isVisible()) win.showInactive()
+    log('[fullscreen] 全屏结束了，回来', cls)
   }
 }
 

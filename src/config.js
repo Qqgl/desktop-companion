@@ -55,6 +55,16 @@ const DEFAULTS = {
     // 留空则用内置合成节拍（底鼓 + 踩镲）—— 有声音锚，动作才不像抽动。
     music: '',
   },
+  window: {
+    // 前台是全屏应用时自动躲开。注意：**最大化窗口不算全屏**，
+    // 判定用的是 DWM 可见边界 + 有无标题栏，见 tools/foreground-watch.ps1
+    autoHideFullscreen: true,
+    // 收起来之后，鼠标划过她的位置再出现
+    hoverReveal: true,
+    hoverMargin: 28,        // 鼠标离她多近算"划过来"，单位像素
+    // 定时重新压一次窗口置顶，防止被别的窗口抢走
+    keepTopmost: true,
+  },
 }
 
 function expandEnv(value) {
@@ -103,6 +113,7 @@ function load(rootDir, log = console.log) {
     asr: { ...DEFAULTS.asr, ...(user.asr || {}) },
     vision: { ...DEFAULTS.vision, ...(user.vision || {}) },
     dance: { ...DEFAULTS.dance, ...(user.dance || {}) },
+    window: { ...DEFAULTS.window, ...(user.window || {}) },
   }
   cfg.brain.apiKey = expandEnv(cfg.brain.apiKey)
 
