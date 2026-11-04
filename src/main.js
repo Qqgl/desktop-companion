@@ -192,6 +192,10 @@ function createWindow() {
     transparent: true,
     backgroundColor: '#00000000',
     hasShadow: false,
+    // Windows 11 会给每个窗口画圆角和一圈 1px 边框，透明窗口也躲不掉，
+    // 结果就是她周围出现一个"稍微透明的方框"。关掉这两个。
+    roundedCorners: false,
+    thickFrame: false,
     resizable: false,
     movable: false,        // 位置由主进程接管，避免和命中测试打架
     minimizable: false,

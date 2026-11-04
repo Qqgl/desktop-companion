@@ -1010,14 +1010,7 @@
 
     c.setTransform(dpr * k, 0, 0, dpr * k, dpr * tx, dpr * ty)
     character.draw(c, rig)
-
-    // 左缘一点柔和的阴影，让贴边的部分不那么"硬切"
-    c.setTransform(dpr, 0, 0, dpr, 0, 0)
-    const g = c.createLinearGradient(0, 0, 14, 0)
-    g.addColorStop(0, 'rgba(0, 0, 0, 0.22)')
-    g.addColorStop(1, 'rgba(0, 0, 0, 0)')
-    c.fillStyle = g
-    c.fillRect(0, 0, 14, h)
+    // 不再画左缘阴影：那一小块半透明也会被看成"边框"的一部分
   }
 
   /** 聆听/说话时的光晕，画在角色背后。三种画法共用，所以放在这里。 */
