@@ -84,11 +84,28 @@
   const pointer = { x: DW / 2, y: DH - 60, inside: false }
   let ignoring = true
   let uiOpen = false
+  let handleMode = false   // 收起成右侧小把手的形态
+
+  if (window.companion.onMode) {
+    window.companion.onMode((m) => {
+      handleMode = m === 'handle'
+      if (handleMode) {
+        hideBubble()
+        if (uiOpen) closeComposer()
+      }
+      resize()
+      hitState = null
+      updateHit(handleMode ? 1 : 0, handleMode ? 1 : 0)
+      if (handleMode) window.companion.setIgnoreMouse(false)
+    })
+  }
 
   const toDesign = (cx, cy) => ({ x: cx / sx, y: cy / sy })
 
   /** 命中测试：鼠标在角色身上（或输入框开着）才取消穿透，否则让给桌面 */
   function hitTest(px, py) {
+    // 收起成小把手时，整个窗口就是把手，点哪儿都算中
+    if (handleMode) return true
     const pad = 8
     for (const s of character.hit(rig)) {
       const dx = (px - s.x) / (s.rx + pad)
@@ -195,6 +212,10 @@
   })
 
   function onClick() {
+    if (handleMode) {
+      if (window.companion.untuck) window.companion.untuck()
+      return
+    }
     if (uiOpen) return closeComposer()
     openComposer()
   }
@@ -939,6 +960,16 @@
 
     rig.update(dt)
 
+    // 收起状态：窗口已经被缩成右边一个小把手，只画一个提示条。
+    // 这里必须用原始像素坐标，不能用 DW×DH 的设计坐标 —— 否则会被压扁。
+    if (handleMode) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.clearRect(0, 0, W, H)
+      drawHandle(ctx, W, H)
+      requestAnimationFrame(frame)
+      return
+    }
+
     ctx.setTransform(dpr * sx, 0, 0, dpr * sy, 0, 0)
     ctx.clearRect(0, 0, DW, DH)
     drawBackground()
@@ -948,6 +979,50 @@
     if (DEBUG) drawDebug()
 
     requestAnimationFrame(frame)
+  }
+
+  /**
+   * 收起后的把手：一条贴在屏幕右侧的小竖条，带她的发色渐变和一个朝左的箭头。
+   * 点它就展开。宽度 44、高度 96，够点得着，又不挡事。
+   */
+  function drawHandle(c, w, h) {
+    const t = performance.now() / 1000
+    const breathe = 0.5 + 0.5 * Math.sin(t * 1.6)
+
+    c.save()
+    // 圆角矩形：左边两个角圆一点，右边贴屏幕边缘
+    const r = w * 0.5
+    c.beginPath()
+    c.moveTo(w, 4)
+    c.lineTo(r + 2, 4)
+    c.quadraticCurveTo(4, 4, 4, h / 2)
+    c.quadraticCurveTo(4, h - 4, r + 2, h - 4)
+    c.lineTo(w, h - 4)
+    c.closePath()
+
+    const g = c.createLinearGradient(0, 0, w, h)
+    g.addColorStop(0, 'rgba(150, 200, 255, 0.92)')
+    g.addColorStop(1, 'rgba(96, 140, 210, 0.92)')
+    c.shadowColor = 'rgba(120, 190, 255, ' + (0.35 + 0.35 * breathe) + ')'
+    c.shadowBlur = 12 + 6 * breathe
+    c.fillStyle = g
+    c.fill()
+
+    // 朝左的箭头：提示"点这里展开"
+    c.shadowBlur = 0
+    c.strokeStyle = 'rgba(30, 44, 66, 0.85)'
+    c.lineWidth = 2.4
+    c.lineCap = 'round'
+    c.lineJoin = 'round'
+    const cy = h / 2
+    const ax = w * 0.52
+    const ay = h * 0.16
+    c.beginPath()
+    c.moveTo(ax + 5, cy - ay * 0.55)
+    c.lineTo(ax - 4, cy)
+    c.lineTo(ax + 5, cy + ay * 0.55)
+    c.stroke()
+    c.restore()
   }
 
   /** 聆听/说话时的光晕，画在角色背后。三种画法共用，所以放在这里。 */

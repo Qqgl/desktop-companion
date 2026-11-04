@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('companion', {
   quit: () => ipcRenderer.send('app:quit'),
   refreshTray: () => ipcRenderer.send('tray:refresh'),
   contextMenu: () => ipcRenderer.send('ui:contextmenu'),
+  /** 收起 / 展开：渲染端据此切换成小把手或完整角色 */
+  onMode: (cb) => ipcRenderer.on('ui:mode', (_e, m) => cb(m)),
+  untuck: () => ipcRenderer.send('ui:untuck'),
   assets: () => ipcRenderer.invoke('character:assets'),
   info: () => ipcRenderer.invoke('app:info'),
   /** 全局光标位置（窗口坐标系），鼠标在窗口外也会更新 */

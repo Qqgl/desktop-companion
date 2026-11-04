@@ -142,7 +142,8 @@ function loadState() {
 
 function saveState() {
   try {
-    const b = win ? win.getBounds() : null
+    // 收起成把手的时候，窗口位置是把手的位置，不能拿它覆盖她的真实位置
+    const b = handleMode ? fullBounds : (win ? win.getBounds() : null)
     fs.mkdirSync(path.dirname(stateFile()), { recursive: true })
     fs.writeFileSync(
       stateFile(),
@@ -328,7 +329,7 @@ function refreshTrayMenu() {
   if (!tray) return
   const visible = win ? win.isVisible() : false
   const menu = Menu.buildFromTemplate([
-    { label: visible ? '收起来（鼠标划过再出现）' : '叫它出来', click: () => toggleVisible() },
+    { label: handleMode || !visible ? '叫它出来' : '收起来（右下角留个小把手）', click: () => toggleVisible() },
     { type: 'separator' },
     {
       label: '开机自启（延迟 10 秒）',
@@ -432,19 +433,63 @@ function applyDnd() {
   refreshTrayMenu()
 }
 
+// ---------------------------------------------------------------- 收起 / 展开
+
+const HANDLE_W = 44
+const HANDLE_H = 96
+let handleMode = false
+let fullBounds = null      // 收起前的完整位置，展开时还原
+
+/** 收起：窗口缩成贴在屏幕右侧的一条小把手，点它再展开 */
+function tuck() {
+  if (!win || handleMode) return
+  const a = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+  fullBounds = win.getBounds()
+
+  handleMode = true
+  tuckAway = true
+  hoverRevealed = false
+  win.setBounds({
+    x: Math.round(a.x + a.width - HANDLE_W),
+    y: Math.round(a.y + a.height / 2 - HANDLE_H / 2),
+    width: HANDLE_W,
+    height: HANDLE_H,
+  })
+  win.webContents.send('ui:mode', 'handle')
+  win.setIgnoreMouseEvents(false)   // 把手必须能点
+  win.showInactive()
+  refreshTrayMenu()
+  log('[tuck] 已收起为把手', JSON.stringify(win.getBounds()))
+}
+
+/** 展开：还原成完整角色 */
+function untuck() {
+  if (!win || !handleMode) return
+  handleMode = false
+  tuckAway = false
+  const b = fullBounds || defaultPosition()
+  const p = clampToScreen(b.x, b.y)
+  win.setBounds({
+    x: p.x,
+    y: clampDragY(p.x, p.y),
+    width: WIN_W,
+    height: WIN_H,
+  })
+  win.webContents.send('ui:mode', 'character')
+  win.showInactive()
+  refreshTrayMenu()
+  saveState()
+  log('[tuck] 已展开')
+}
+
 function toggleVisible() {
   if (!win) return
-  if (win.isVisible()) {
-    tuckAway = true          // 允许鼠标划过来唤出
-    hoverArmed = false       // 光标还在她身上时不能立刻弹回去
-    hoverRevealed = false
-    win.hide()
-  } else {
-    tuckAway = false
-    hoverRevealed = false
-    win.showInactive()
-    recenterIfOffscreen()
-  }
+  if (handleMode) return untuck()
+  if (win.isVisible()) return tuck()
+  tuckAway = false
+  hoverRevealed = false
+  win.showInactive()
+  recenterIfOffscreen()
   refreshTrayMenu()
 }
 
@@ -536,39 +581,11 @@ function startCursorBeacon() {
 
     const b = win.getBounds()
     const c = screen.getCursorScreenPoint()
-    const m = Number(cfg.window.hoverMargin) || 28
-    const inside =
-      c.x >= b.x - m && c.x <= b.x + b.width + m &&
-      c.y >= b.y - m && c.y <= b.y + b.height + m
 
-    // ---------------- 收起来时的唤醒 ----------------
-    if (!win.isVisible()) {
-      // 迟滞：刚藏起来时光标还在她的范围里，必须先离开一次才能再唤醒，
-      // 否则会「藏起来→立刻弹出」无限弹跳
-      if (!hoverArmed) {
-        if (!inside) hoverArmed = true
-        return
-      }
-      if (tuckAway && cfg.window.hoverReveal !== false && !dnd && inside) {
-        win.showInactive()
-        hoverRevealed = true
-        hoverArmed = false
-        refreshTrayMenu()
-        log('[hover] 鼠标划过，出来')
-      }
-      return
-    }
+    // 收起成把手时窗口是可见的，光标轮询只负责置顶；位置也不用再喂给她
+    if (!win.isVisible()) return
 
     win.webContents.send('cursor:point', { x: c.x - b.x, y: c.y - b.y })
-
-    // 悬浮唤出来的，鼠标离开就再收回去
-    if (hoverRevealed && !inside) {
-      hoverRevealed = false
-      win.hide()
-      refreshTrayMenu()
-      log('[hover] 鼠标离开，收回去')
-      return
-    }
 
     // 每 ~5 秒重新压一次置顶
     if (cfg.window.keepTopmost !== false && ++tick % 55 === 0) {
@@ -717,14 +734,14 @@ function wireIpc() {
     draggable: cfg.window.draggable === true,
   }))
 
-  // 在她身上右键：弹出她自己的菜单（托盘那个不好找）
+  // 她身上右键：弹出她自己的菜单（托盘那个不好找）
   ipcMain.on('ui:contextmenu', () => {
     if (!win) return
     const visible = win.isVisible()
     Menu.buildFromTemplate([
       { label: '打开输入框', click: () => openComposerFromMenu() },
       {
-        label: visible ? '收起来（鼠标划过再出现）' : '叫它出来',
+        label: handleMode || !visible ? '叫它出来' : '收起来（右下角留个小把手）',
         click: () => toggleVisible(),
       },
       { label: '跳个舞', click: () => startDance() },
@@ -737,6 +754,9 @@ function wireIpc() {
       { label: '退出', click: () => quit() },
     ]).popup({ window: win })
   })
+
+  // 点了收起后的小把手
+  ipcMain.on('ui:untuck', () => untuck())
 
   // ---------------- 记忆 ----------------
 
@@ -1183,6 +1203,12 @@ function runSnapshot() {
           } catch (e) {
             log('[sim] 失败', e.message)
           }
+        }
+
+        // 自检：收起来看看把手长什么样
+        if (hasFlag('--tuck')) {
+          tuck()
+          await sleep(800)
         }
 
         // 自检：让她跳起来，配合 --shots 连拍看幅度
