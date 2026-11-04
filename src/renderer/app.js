@@ -958,17 +958,20 @@
       rig.listenLevel = lerp(rig.listenLevel, 0, 0.15)
     }
 
-    rig.update(dt)
-
-    // 收起状态：窗口已经被缩成右边一个小把手，只画一个提示条。
-    // 这里必须用原始像素坐标，不能用 DW×DH 的设计坐标 —— 否则会被压扁。
+    // 收起状态：窗口缩成屏幕右边一个小方块，只画她的头 —— 像躲在屏幕边缘探头看。
     if (handleMode) {
+      // 探头的时候应该朝屏幕里看，不是朝外
+      rig.setLook(-0.95, -0.05)
+      rig.update(dt)
+
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.clearRect(0, 0, W, H)
       drawHandle(ctx, W, H)
       requestAnimationFrame(frame)
       return
     }
+
+    rig.update(dt)
 
     ctx.setTransform(dpr * sx, 0, 0, dpr * sy, 0, 0)
     ctx.clearRect(0, 0, DW, DH)
@@ -982,47 +985,38 @@
   }
 
   /**
-   * 收起后的把手：一条贴在屏幕右侧的小竖条，带她的发色渐变和一个朝左的箭头。
-   * 点它就展开。宽度 44、高度 96，够点得着，又不挡事。
+   * 收起后的样子：她整个人躲在屏幕右边，只探出半个脑袋"暗中观察"。
+   *
+   * 做法不是画图标，而是把**她自己的头**按比例画到这个小窗口里，
+   * 并且让脸的中线落在窗口右缘之外 —— 右半边被屏幕边缘切掉，
+   * 看起来就像从边上探出来。再加一点缓慢的左右轻晃，像在偷偷张望。
    */
   function drawHandle(c, w, h) {
     const t = performance.now() / 1000
-    const breathe = 0.5 + 0.5 * Math.sin(t * 1.6)
+    // 探头的那点小动作：左右 3px 慢摆 + 上下 1.5px 呼吸
+    const peekX = Math.sin(t * 0.9) * 3
+    const peekY = Math.sin(t * 1.4) * 1.5
 
-    c.save()
-    // 圆角矩形：左边两个角圆一点，右边贴屏幕边缘
-    const r = w * 0.5
-    c.beginPath()
-    c.moveTo(w, 4)
-    c.lineTo(r + 2, 4)
-    c.quadraticCurveTo(4, 4, 4, h / 2)
-    c.quadraticCurveTo(4, h - 4, r + 2, h - 4)
-    c.lineTo(w, h - 4)
-    c.closePath()
+    // 头部中心（设计坐标），按它来定位，换立绘也不用改这里
+    const hp = character.headPoint ? character.headPoint(rig) : { x: 180, y: 240 }
 
-    const g = c.createLinearGradient(0, 0, w, h)
-    g.addColorStop(0, 'rgba(150, 200, 255, 0.92)')
-    g.addColorStop(1, 'rgba(96, 140, 210, 0.92)')
-    c.shadowColor = 'rgba(120, 190, 255, ' + (0.35 + 0.35 * breathe) + ')'
-    c.shadowBlur = 12 + 6 * breathe
+    // 缩放：整颗头装进窗口，右边只被切掉一点点。
+    const k = (h / 150) * 0.76
+
+    // 把头摆在窗口中间偏右：右缘压住屏幕边，像躲在边上探出来
+    const tx = (w / 2 + 10 + peekX) - hp.x * k
+    const ty = (h * 0.42 + peekY) - hp.y * k
+
+    c.setTransform(dpr * k, 0, 0, dpr * k, dpr * tx, dpr * ty)
+    character.draw(c, rig)
+
+    // 左缘一点柔和的阴影，让贴边的部分不那么"硬切"
+    c.setTransform(dpr, 0, 0, dpr, 0, 0)
+    const g = c.createLinearGradient(0, 0, 14, 0)
+    g.addColorStop(0, 'rgba(0, 0, 0, 0.22)')
+    g.addColorStop(1, 'rgba(0, 0, 0, 0)')
     c.fillStyle = g
-    c.fill()
-
-    // 朝左的箭头：提示"点这里展开"
-    c.shadowBlur = 0
-    c.strokeStyle = 'rgba(30, 44, 66, 0.85)'
-    c.lineWidth = 2.4
-    c.lineCap = 'round'
-    c.lineJoin = 'round'
-    const cy = h / 2
-    const ax = w * 0.52
-    const ay = h * 0.16
-    c.beginPath()
-    c.moveTo(ax + 5, cy - ay * 0.55)
-    c.lineTo(ax - 4, cy)
-    c.lineTo(ax + 5, cy + ay * 0.55)
-    c.stroke()
-    c.restore()
+    c.fillRect(0, 0, 14, h)
   }
 
   /** 聆听/说话时的光晕，画在角色背后。三种画法共用，所以放在这里。 */

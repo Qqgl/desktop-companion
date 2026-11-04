@@ -435,8 +435,9 @@ function applyDnd() {
 
 // ---------------------------------------------------------------- 收起 / 展开
 
-const HANDLE_W = 44
-const HANDLE_H = 96
+// 收起后的小窗口：只露她的头，尺寸按头的比例来（宽 76 / 高 88）
+const HANDLE_W = 76
+const HANDLE_H = 88
 let handleMode = false
 let fullBounds = null      // 收起前的完整位置，展开时还原
 
