@@ -1003,8 +1003,9 @@
     // 缩放：整颗头装进窗口，右边只被切掉一点点。
     const k = (h / 150) * 0.76
 
-    // 把头摆在窗口中间偏右：右缘压住屏幕边，像躲在边上探出来
-    const tx = (w / 2 + 10 + peekX) - hp.x * k
+    // 头往右推，屏幕边压掉右半边 —— 只露左半张脸 + 左耳。
+    // 数值是试出来的：+3 只剩头发，居中又是整张脸，w-9 正好半个脸。
+    const tx = (w - 9 + peekX) - hp.x * k
     const ty = (h * 0.42 + peekY) - hp.y * k
 
     c.setTransform(dpr * k, 0, 0, dpr * k, dpr * tx, dpr * ty)
