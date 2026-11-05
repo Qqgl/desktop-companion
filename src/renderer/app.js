@@ -1001,16 +1001,30 @@
     const hp = character.headPoint ? character.headPoint(rig) : { x: 180, y: 240 }
 
     // 缩放：整颗头装进窗口，右边只被切掉一点点。
-    const k = (h / 150) * 0.76
+    // 0.76 时耳尖会顶到窗口上沿被切平，缩到 0.7 就完整了
+    const k = (h / 150) * 0.70
 
     // 头往右推，屏幕边压掉右半边 —— 只露左半张脸 + 左耳。
     // 数值是试出来的：+3 只剩头发，居中又是整张脸，w-9 正好半个脸。
     const tx = (w - 9 + peekX) - hp.x * k
-    const ty = (h * 0.42 + peekY) - hp.y * k
+    const ty = (h * 0.45 + peekY) - hp.y * k
 
     c.setTransform(dpr * k, 0, 0, dpr * k, dpr * tx, dpr * ty)
     character.draw(c, rig)
-    // 不再画左缘阴影：那一小块半透明也会被看成"边框"的一部分
+
+    // 底部渐隐：不然身体会被窗口下沿"一刀切"出一条刺眼的横线。
+    // destination-out 用渐变当橡皮擦，越往下擦得越干净。
+    c.setTransform(dpr, 0, 0, dpr, 0, 0)
+    const fadeH = Math.round(h * 0.38)
+    const fade = c.createLinearGradient(0, h - fadeH, 0, h)
+    fade.addColorStop(0, 'rgba(0, 0, 0, 0)')
+    fade.addColorStop(0.55, 'rgba(0, 0, 0, 0.55)')
+    fade.addColorStop(1, 'rgba(0, 0, 0, 1)')
+    c.save()
+    c.globalCompositeOperation = 'destination-out'
+    c.fillStyle = fade
+    c.fillRect(0, h - fadeH, w, fadeH)
+    c.restore()
   }
 
   /** 聆听/说话时的光晕，画在角色背后。三种画法共用，所以放在这里。 */
