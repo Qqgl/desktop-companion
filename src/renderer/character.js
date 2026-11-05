@@ -767,7 +767,9 @@
     }
 
     /** 尾巴：绕支点旋转 + 略微跟着视差横移 */
-    drawTail(ctx, rig, bx, bottom) {
+    drawTail(ctx, rig, bx, bottom, opts = {}) {
+      // 收起探头时不需要尾巴：那一小块毛在半个脑袋旁边反而碍眼
+      if (opts.noTail) return
       const t = this.tail
       if (!t || !t.img) return
 
@@ -802,7 +804,7 @@
       ctx.restore()
     }
 
-    draw(ctx, rig) {
+    draw(ctx, rig, opts = {}) {
       if (!this.ready) return
       const bottom = this.baseY + this.baseH
       const bx = this.baseX
@@ -824,7 +826,7 @@
       }
 
       // 尾巴先画：它在身体后面，静止时被手臂挡住
-      this.drawTail(ctx, rig, bx, bottom)
+      this.drawTail(ctx, rig, bx, bottom, opts)
 
       for (const L of this.layers) {
         if (!L.img) continue

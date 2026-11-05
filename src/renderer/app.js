@@ -1010,15 +1010,17 @@
     const ty = (h * 0.45 + peekY) - hp.y * k
 
     c.setTransform(dpr * k, 0, 0, dpr * k, dpr * tx, dpr * ty)
-    character.draw(c, rig)
+    // 收起时只画头：尾巴那一小团毛在半个脑袋旁边没有意义，反而抢注意力
+    character.draw(c, rig, { noTail: true })
 
     // 底部渐隐：不然身体会被窗口下沿"一刀切"出一条刺眼的横线。
-    // destination-out 用渐变当橡皮擦，越往下擦得越干净。
+    // 起点要提到下巴以下 —— 那团白色是肩上的毛领（属于身体图层，不是尾巴），
+    // 渐隐起得太低就会在半个脑袋旁边挂着一撮莫名其妙的毛。
     c.setTransform(dpr, 0, 0, dpr, 0, 0)
-    const fadeH = Math.round(h * 0.38)
+    const fadeH = Math.round(h * 0.5)
     const fade = c.createLinearGradient(0, h - fadeH, 0, h)
     fade.addColorStop(0, 'rgba(0, 0, 0, 0)')
-    fade.addColorStop(0.55, 'rgba(0, 0, 0, 0.55)')
+    fade.addColorStop(0.35, 'rgba(0, 0, 0, 0.72)')
     fade.addColorStop(1, 'rgba(0, 0, 0, 1)')
     c.save()
     c.globalCompositeOperation = 'destination-out'
